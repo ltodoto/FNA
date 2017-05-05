@@ -261,6 +261,7 @@ namespace Microsoft.Xna.Framework
 			drawableComponents = new List<IDrawable>();
 			currentlyDrawingComponents = new List<IDrawable>();
 
+			IsActive = true;
 			IsMouseVisible = false;
 			IsFixedTimeStep = true;
 			TargetElapsedTime = TimeSpan.FromTicks(166667); // 60fps
@@ -275,6 +276,8 @@ namespace Microsoft.Xna.Framework
 			Window = FNAPlatform.CreateWindow();
 			Mouse.WindowHandle = Window.Handle;
 
+			// FrameworkDispatcher.Update should be time-less, yet touch input needs time.
+			FrameworkDispatcher.GameTime = gameTime;
 			FrameworkDispatcher.Update();
 
 			// Ready to run the loop!

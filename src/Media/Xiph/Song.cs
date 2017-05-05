@@ -169,8 +169,7 @@ namespace Microsoft.Xna.Framework.Media
 				0
 			);
 
-			// Thanks sizeof(long) -flibit
-			int fileRate = (int) (fileInfo.rate.ToInt64() & 0xFFFFFFFF);
+			int fileRate = (int)fileInfo.rate;
 
 			// TODO: ov_comment() -flibit
 			Name = Path.GetFileNameWithoutExtension(fileName);

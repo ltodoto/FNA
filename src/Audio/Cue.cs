@@ -600,9 +600,12 @@ namespace Microsoft.Xna.Framework.Audio
 
 
 			// Clear out sound effect instances as they finish
+			PlayWaveEventInstance evtInstancePrev = null;
 			for (int i = 0; i < INTERNAL_instancePool.Count; i += 1)
 			{
-				if (INTERNAL_instancePool[i].State == SoundState.Stopped)
+				if (INTERNAL_instancePool[i].State == SoundState.Stopped &&
+					// Android likes to lock up here otherwise
+					evtInstancePrev != INTERNAL_playWaveEventBySound[INTERNAL_instancePool[i]])
 				{
 					// Get the event that spawned this instance...
 					PlayWaveEventInstance evtInstance =
@@ -625,6 +628,7 @@ namespace Microsoft.Xna.Framework.Audio
 
 					// Removed a wave, have to step back...
 					i -= 1;
+					evtInstancePrev = evtInstance;
 				}
 			}
 

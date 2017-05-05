@@ -27,7 +27,7 @@ namespace Microsoft.Xna.Framework
 	{
 		#region Static Constants
 
-		private static readonly string OSVersion = SDL.SDL_GetPlatform();
+		private static readonly string OSVersion = SDL.SDL_GetPlatformNative();
 
 		private static readonly bool UseScancodes = Environment.GetEnvironmentVariable(
 			"FNA_KEYBOARD_USE_SCANCODES"
@@ -99,6 +99,22 @@ namespace Microsoft.Xna.Framework
 			) == 1) {
 				INTERNAL_AddInstance(evt[0].cdevice.which);
 			}
+
+			/* Sometimes Android hates us.
+			 * Sometimes it hates us horribly.
+			 * And sometimes THIS happens!
+			 *
+			 * Still unsure if SDL2 bug or not. At least it works this way.
+			 * -ade
+			 */
+			if (OSVersion.Equals("Android"))
+			{
+				int numJoysticks = SDL.SDL_NumJoysticks();
+				for (int i = 0; i < numJoysticks; i++)
+				{
+					INTERNAL_AddInstance(i);
+				}
+			}
 		}
 
 		public static void ProgramExit(object sender, EventArgs e)
@@ -114,12 +130,9 @@ namespace Microsoft.Xna.Framework
 		public static GameWindow CreateWindow()
 		{
 			// GLContext environment variables
-			bool forceES3 = Environment.GetEnvironmentVariable(
-				"FNA_OPENGL_FORCE_ES3"
-			) == "1";
-			bool forceCoreProfile = Environment.GetEnvironmentVariable(
-				"FNA_OPENGL_FORCE_CORE_PROFILE"
-			) == "1";
+			string forceES = Environment.GetEnvironmentVariable("FNA_OPENGL_FORCE_ES");
+			byte forceESVersion = string.IsNullOrEmpty(forceES) ? (byte)0 : byte.Parse(forceES);
+			bool forceCoreProfile = Environment.GetEnvironmentVariable("FNA_OPENGL_FORCE_CORE_PROFILE") == "1";
 
 			// Set and initialize the SDL2 window
 			SDL.SDL_WindowFlags initFlags = (
@@ -134,15 +147,52 @@ namespace Microsoft.Xna.Framework
 				initFlags |= SDL.SDL_WindowFlags.SDL_WINDOW_ALLOW_HIGHDPI;
 			}
 
-			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 8);
-			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 8);
-			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 8);
-			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 8);
+			switch(GraphicsAdapter.DefaultAdapter.CurrentDisplayMode.Format)
+			{
+				case SurfaceFormat.Bgr565:
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 5);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 6);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 5);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 0);
+				break;
+				case SurfaceFormat.Bgra4444:
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 4);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 4);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 4);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 4);
+				break;
+				case SurfaceFormat.Bgra5551:
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 5);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 5);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 5);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 1);
+				break;
+				case SurfaceFormat.Color:
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 8);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 8);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 8);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 8);
+				break;
+				case SurfaceFormat.Rgba64:
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 16);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 16);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 16);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 16);
+				break;
+				default:
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_RED_SIZE, 8);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_GREEN_SIZE, 8);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_BLUE_SIZE, 8);
+				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 8);
+				break;
+			}
 			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_DEPTH_SIZE, 24);
 			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_STENCIL_SIZE, 8);
 			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_DOUBLEBUFFER, 1);
-			if (forceES3)
+			if (forceESVersion > 0)
 			{
+				if (forceESVersion > 3)
+					forceESVersion = 3;
 				SDL.SDL_GL_SetAttribute(
 					SDL.SDL_GLattr.SDL_GL_RETAINED_BACKING,
 					0
@@ -153,7 +203,7 @@ namespace Microsoft.Xna.Framework
 				);
 				SDL.SDL_GL_SetAttribute(
 					SDL.SDL_GLattr.SDL_GL_CONTEXT_MAJOR_VERSION,
-					3
+					forceESVersion
 				);
 				SDL.SDL_GL_SetAttribute(
 					SDL.SDL_GLattr.SDL_GL_CONTEXT_MINOR_VERSION,
@@ -180,10 +230,13 @@ namespace Microsoft.Xna.Framework
 				);
 			}
 #if DEBUG
-			SDL.SDL_GL_SetAttribute(
-				SDL.SDL_GLattr.SDL_GL_CONTEXT_FLAGS,
-				(int) SDL.SDL_GLcontext.SDL_GL_CONTEXT_DEBUG_FLAG
-			);
+			if (SDL.SDL_GL_ExtensionSupported("KHR_debug") == SDL.SDL_bool.SDL_TRUE)
+			{
+				SDL.SDL_GL_SetAttribute(
+					SDL.SDL_GLattr.SDL_GL_CONTEXT_FLAGS,
+					(int) SDL.SDL_GLcontext.SDL_GL_CONTEXT_DEBUG_FLAG
+				);
+			}
 #endif
 			string title = MonoGame.Utilities.AssemblyHelper.GetDefaultWindowTitle();
 			IntPtr window = SDL.SDL_CreateWindow(
@@ -194,6 +247,13 @@ namespace Microsoft.Xna.Framework
 				GraphicsDeviceManager.DefaultBackBufferHeight,
 				initFlags
 			);
+			if (window == IntPtr.Zero)
+			{
+				// This especially helps debugging window creation failures with ES -ade
+				throw new NoSuitableGraphicsDeviceException(
+					SDL.SDL_GetError()
+				);
+			}
 			INTERNAL_SetIcon(window, title);
 
 			// Disable the screensaver.
@@ -867,38 +927,65 @@ namespace Microsoft.Xna.Framework
 			for (int i = 0; i < adapters.Length; i += 1)
 			{
 				List<DisplayMode> modes = new List<DisplayMode>();
-				int numModes = SDL.SDL_GetNumDisplayModes(i);
-				for (int j = numModes - 1; j >= 0; j -= 1)
+				string modesOverride = Environment.GetEnvironmentVariable("FNA_GRAPHICS_MODES");
+				if (String.IsNullOrEmpty(modesOverride))
 				{
-					SDL.SDL_GetDisplayMode(i, j, out filler);
-
-					// Check for dupes caused by varying refresh rates.
-					bool dupe = false;
-					foreach (DisplayMode mode in modes)
+					int numModes = SDL.SDL_GetNumDisplayModes(i);
+					for (int j = numModes - 1; j >= 0; j -= 1)
 					{
-						if (filler.w == mode.Width && filler.h == mode.Height)
+						SDL.SDL_GetDisplayMode(i, j, out filler);
+
+						// Check for dupes caused by varying refresh rates.
+						bool dupe = false;
+						foreach (DisplayMode mode in modes)
 						{
-							dupe = true;
+							if (filler.w == mode.Width && filler.h == mode.Height &&
+								INTERNAL_convertPixelFormat(filler.format) == mode.Format)
+							{
+								dupe = true;
+							}
+						}
+						if (!dupe)
+						{
+							modes.Add(
+								new DisplayMode(
+									filler.w,
+									filler.h,
+									INTERNAL_convertPixelFormat(filler.format)
+								)
+							);
 						}
 					}
-					if (!dupe)
+				}
+				else
+				{
+					// SDL2 on Android requires us to provide our own graphics modes due to UI element size calculations.
+					string[] modesOverrides = modesOverride.Split(':');
+					for (int j = 0; j < modesOverrides.Length; j++)
 					{
-						modes.Add(
-							new DisplayMode(
-								filler.w,
-								filler.h,
-								SurfaceFormat.Color // FIXME: Assumption!
-							)
-						);
+						modes.Add(INTERNAL_ParseModeString(modesOverrides[j]));
 					}
 				}
-				SDL.SDL_GetCurrentDisplayMode(i, out filler);
-				adapters[i] = new GraphicsAdapter(
-					new DisplayMode(
+
+				DisplayMode currentMode;
+
+				string currentModeOverride = Environment.GetEnvironmentVariable("FNA_GRAPHICS_MODE_CURRENT");
+				if (String.IsNullOrEmpty(currentModeOverride))
+				{
+					SDL.SDL_GetCurrentDisplayMode(i, out filler);
+					currentMode = new DisplayMode(
 						filler.w,
 						filler.h,
-						SurfaceFormat.Color // FIXME: Assumption!
-					),
+						INTERNAL_convertPixelFormat(filler.format)
+					);
+				}
+				else
+				{
+					currentMode = INTERNAL_ParseModeString(currentModeOverride);
+				}
+
+				adapters[i] = new GraphicsAdapter(
+					currentMode,
 					new DisplayModeCollection(modes),
 					@"\\.\DISPLAY" + (i + 1).ToString(),
 					SDL.SDL_GetDisplayName(i)
@@ -925,6 +1012,13 @@ namespace Microsoft.Xna.Framework
 			if (GetRelativeMouseMode())
 			{
 				flags = SDL.SDL_GetRelativeMouseState(out x, out y);
+			}
+			else if ( // The following platforms don't support GetGlobalMouseState.
+				OSVersion.Equals("Emscripten") ||
+				OSVersion.Equals("Android") ||
+				OSVersion.Equals("iOS")
+			) {
+				flags = SDL.SDL_GetMouseState(out x, out y);
 			}
 			else
 			{
@@ -962,10 +1056,67 @@ namespace Microsoft.Xna.Framework
 
 		#endregion
 
+
+		#region Touch Methods
+
+		public static bool HasTouch()
+		{
+			/* WARNING: It appears that this always returns 0 until at least one touch event has been received. So this
+			 * result should really be thought of as "HasReceivedATouchEver()" rather than telling you whether a touch-capable
+			 * device exists on this computer or not.
+			 * -BlueLineGames*
+			 */
+			return SDL.SDL_GetNumTouchDevices() > 0;
+		}
+
+		public static bool IsOnTouchPlatform()
+		{
+			/* Support for touch has been completely dropped for all capable desktop platforms in XNA (Windows 7).
+			 * Source: http://blogs.msdn.com/b/shawnhar/archive/2010/09/09/touch-input-on-windows-in-xna-game-studio-4-0.aspx
+			 * Touch should thus ideally only be enabled on mobile platforms.
+			 * If you still want to have touch forcibly enabled anywhere, set the environment variable FNA_TOUCH_FORCE_ENABLE to 1.
+			 * -ade
+			 */
+			return
+				OSVersion.Equals("Emscripten") || // Is touch even supported via JSIL?
+				OSVersion.Equals("Android") ||
+				OSVersion.Equals("iOS") ||
+				Environment.GetEnvironmentVariable(
+					"FNA_TOUCH_FORCE_ENABLE"
+				) == "1";
+		}
+
+		public static int GetMaximumTouchCount()
+		{
+			/* XNA4 never reports a value higher than 4.
+			 * Source: https://msdn.microsoft.com/en-us/library/ff434208(v=xnagamestudio.42).aspx#note
+			 * XNA even ignores additional touches if 4 fingers are already touching the screen.
+			 * To enforce your own maximum, set the environment variable FNA_TOUCH_FINGERS_MAXIMUM to your maximum.
+			 * To accept unlimited touches, set FNA_TOUCH_FINGERS_MAXIMUM to 0.
+			 * SDL2 on Android can't be trusted when it comes to the maximum finger count - it only approximates.
+			 * -ade
+			 */
+			string maxEnv = Environment.GetEnvironmentVariable(
+				"FNA_TOUCH_FINGERS_MAXIMUM"
+			);
+			int max;
+			if (string.IsNullOrEmpty(maxEnv) || !int.TryParse(maxEnv, out max))
+				return 4;
+			return max;
+		}
+
+		#endregion
+
 		#region Storage Methods
 
 		public static string GetStorageRoot()
 		{
+			// Required by FNADroid, but who knows what else it may be used for. -ade
+			string altConfigDir = Environment.GetEnvironmentVariable("FNA_CONFDIR");
+			if (!String.IsNullOrEmpty(altConfigDir))
+			{
+				return altConfigDir;
+			}
 			if (OSVersion.Equals("Windows"))
 			{
 				return Path.Combine(
@@ -996,6 +1147,21 @@ namespace Microsoft.Xna.Framework
 					}
 					osConfigDir += "/.local/share";
 				}
+				return osConfigDir;
+			}
+			if (OSVersion.Equals("Android"))
+			{
+				string osConfigDir = Environment.GetEnvironmentVariable("EXTERNAL_STORAGE");
+				if (String.IsNullOrEmpty(osConfigDir))
+				{
+					osConfigDir = Environment.GetEnvironmentVariable("EMULATED_STORAGE_TARGET");
+					if (String.IsNullOrEmpty(osConfigDir))
+					{
+						osConfigDir = "/storage/emulated";
+					}
+					osConfigDir += "/legacy";
+				}
+				osConfigDir += "/Games";
 				return osConfigDir;
 			}
 			throw new NotSupportedException("Unhandled SDL2 platform!");
@@ -1273,6 +1439,45 @@ namespace Microsoft.Xna.Framework
 				}
 			}
 			return result;
+		}
+
+		private static SurfaceFormat INTERNAL_convertPixelFormat(uint pixel)
+		{
+			if (pixel == SDL.SDL_PIXELFORMAT_ABGR8888) return SurfaceFormat.Color;
+			else if (pixel == SDL.SDL_PIXELFORMAT_BGR565) return SurfaceFormat.Bgr565;
+			else if (pixel == SDL.SDL_PIXELFORMAT_RGB565) return SurfaceFormat.Bgr565; // many Android devices - technically incorrect
+			else if (pixel == SDL.SDL_PIXELFORMAT_BGRA5551) return SurfaceFormat.Bgra5551;
+			else if (pixel == SDL.SDL_PIXELFORMAT_BGRA4444) return SurfaceFormat.Bgra4444;
+			else if (pixel == SDL.SDL_PIXELFORMAT_RGB888) return SurfaceFormat.Color; // desktop - technically incorrect
+
+#if DEBUG
+			FNALoggerEXT.LogWarn("Can't convert SDL PIXELFORMAT to FNA SurfaceFormat: " + SDL.SDL_GetPixelFormatName(pixel) + " (" + pixel + ")");
+#endif
+
+			return SurfaceFormat.Color; // fallback
+		}
+
+		private static DisplayMode INTERNAL_ParseModeString(string mode)
+		{
+			string[] data = mode.Split(',');
+			if (data.Length == 2)
+			{
+				return new DisplayMode(
+					int.Parse(data[0].Trim()),
+					int.Parse(data[1].Trim()),
+					SurfaceFormat.Color
+				);
+			}
+			else if (data.Length == 3)
+			{
+				return new DisplayMode(
+					int.Parse(data[0].Trim()),
+					int.Parse(data[1].Trim()),
+					INTERNAL_convertPixelFormat(uint.Parse(data[2].Trim()))
+				);
+			}
+			// What to do, what to do...?
+			return null;
 		}
 
 		#endregion
@@ -1738,6 +1943,19 @@ namespace Microsoft.Xna.Framework
 					result.Append((char) resChar[7]);
 				}
 			}
+			else if (OSVersion.Equals("Android"))
+			{
+				// After further investigation: "the GUID is just the first 16 chars of the name for now"
+				// https://github.com/FNA-XNA/SDL-mirror/blob/1dc8055ef4e9838767f97da0d76db87fc118ddbb/src/joystick/android/SDL_sysjoystick.c#L256
+				result.Append((char) resChar[1]);
+				result.Append((char) resChar[2]);
+				result.Append((char) resChar[3]);
+				result.Append((char) resChar[4]);
+				result.Append((char) resChar[28]);
+				result.Append((char) resChar[29]);
+				result.Append((char) resChar[30]);
+				result.Append((char) resChar[31]);
+			}
 			else
 			{
 				throw new NotSupportedException("Unhandled SDL2 platform!");
@@ -1978,6 +2196,7 @@ namespace Microsoft.Xna.Framework
 			{ '+' /* FIXME: Norwegian SDL2? -flibit */,	Keys.OemPlus },
 			{ 'ø' /* FIXME: Norwegian SDL2? -flibit */,	Keys.OemSemicolon },
 			{ 'æ' /* FIXME: Norwegian SDL2? -flibit */,	Keys.OemQuotes },
+			{ (int) SDL.SDL_Keycode.SDLK_AC_BACK,		Keys.Enter },
 			{ (int) SDL.SDL_Keycode.SDLK_UNKNOWN,		Keys.None }
 		};
 		private static Dictionary<int, Keys> INTERNAL_scanMap = new Dictionary<int, Keys>()

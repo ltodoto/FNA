@@ -63,6 +63,9 @@ namespace Microsoft.Xna.Framework
 			SetGamePadVibration =		SDL2_FNAPlatform.SetGamePadVibration;
 			GetGamePadGUID =		SDL2_FNAPlatform.GetGamePadGUID;
 			SetGamePadLightBar =		SDL2_FNAPlatform.SetGamePadLightBar;
+			HasTouch =			SDL2_FNAPlatform.HasTouch;
+			IsOnTouchPlatform =		SDL2_FNAPlatform.IsOnTouchPlatform;
+			GetMaximumTouchCount =		SDL2_FNAPlatform.GetMaximumTouchCount;
 			GetStorageRoot =		SDL2_FNAPlatform.GetStorageRoot;
 			ShowRuntimeError =		SDL2_FNAPlatform.ShowRuntimeError;
 			TextureDataFromStream =		SDL2_FNAPlatform.TextureDataFromStream;
@@ -200,6 +203,15 @@ namespace Microsoft.Xna.Framework
 
 		public delegate void SetGamePadLightBarFunc(int index, Color color);
 		public static readonly SetGamePadLightBarFunc SetGamePadLightBar;
+
+		public delegate bool HasTouchFunc();
+		public static readonly HasTouchFunc HasTouch;
+
+		public delegate bool IsOnTouchPlatformFunc();
+		public static readonly IsOnTouchPlatformFunc IsOnTouchPlatform;
+
+		public delegate int GetMaximumTouchCountFunc();
+		public static readonly GetMaximumTouchCountFunc GetMaximumTouchCount;
 
 		public delegate string GetStorageRootFunc();
 		public static readonly GetStorageRootFunc GetStorageRoot;

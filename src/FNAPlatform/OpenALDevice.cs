@@ -329,7 +329,9 @@ namespace Microsoft.Xna.Framework.Audio
 				AL10.AL_BITS,
 				out bits
 			);
-			if (bufLen == 0 || bits == 0)
+			if ((bufLen == 0 || bits == 0) &&
+				FNAPlatform.RunLoop == SDL2_FNAPlatform.RunLoop &&
+				!SDL2.SDL.SDL_GetPlatformNative().Equals("Android"))
 			{
 				throw new InvalidOperationException(
 					"OpenAL buffer allocation failed!"
@@ -337,8 +339,8 @@ namespace Microsoft.Xna.Framework.Audio
 			}
 			TimeSpan resultDur = TimeSpan.FromSeconds(
 				bufLen /
-				(bits / 8) /
-				channels /
+				((bits > 0d ? ((double) bits) : 24d) / 8d) /
+				(channels > 0d ? ((double) channels) : 2d) /
 				((double) sampleRate)
 			);
 
@@ -1293,20 +1295,43 @@ namespace Microsoft.Xna.Framework.Audio
 
 		public ReadOnlyCollection<RendererDetail> GetDevices()
 		{
-			IntPtr deviceList = ALC10.alcGetString(IntPtr.Zero, ALC11.ALC_ALL_DEVICES_SPECIFIER);
 			List<RendererDetail> renderers = new List<RendererDetail>();
-
 			int i = 0;
-			string curString = Marshal.PtrToStringAnsi(deviceList);
-			while (!String.IsNullOrEmpty(curString))
+
+			// Android has got some issue with alcGetString
+			string deviceListOverride = Environment.GetEnvironmentVariable("FNA_AUDIO_DEVICES_OUT");
+			if (!String.IsNullOrEmpty(deviceListOverride))
 			{
-				renderers.Add(new RendererDetail(
-					curString,
-					i.ToString()
-				));
-				i += 1;
-				deviceList += curString.Length + 1;
-				curString = Marshal.PtrToStringAnsi(deviceList);
+				deviceListOverride = deviceListOverride.Trim();
+				int split = -1;
+				int splitPrev = 0;
+				while (split + 1 < deviceListOverride.Length && (split = deviceListOverride.IndexOf(':', split + 1)) >= 0)
+				{
+					if (split > 0 && deviceListOverride[split] == '\\')
+						continue; // Allow escaping :
+					renderers.Add(new RendererDetail(
+						deviceListOverride.Substring(splitPrev, split - splitPrev),
+						i.ToString()
+					));
+					i += 1;
+					splitPrev = split + 1;
+				}
+			}
+			else
+			{
+				IntPtr deviceList = ALC10.alcGetString(IntPtr.Zero, ALC11.ALC_ALL_DEVICES_SPECIFIER);
+
+				string curString = Marshal.PtrToStringAnsi(deviceList);
+				while (!String.IsNullOrEmpty(curString))
+				{
+					renderers.Add(new RendererDetail(
+						curString,
+						i.ToString()
+					));
+					i += 1;
+					deviceList += curString.Length + 1;
+					curString = Marshal.PtrToStringAnsi(deviceList);
+				}
 			}
 
 			return new ReadOnlyCollection<RendererDetail>(renderers);
@@ -1314,15 +1339,36 @@ namespace Microsoft.Xna.Framework.Audio
 
 		public ReadOnlyCollection<Microphone> GetCaptureDevices()
 		{
-			IntPtr deviceList = ALC10.alcGetString(IntPtr.Zero, ALC11.ALC_CAPTURE_DEVICE_SPECIFIER);
 			List<Microphone> microphones = new List<Microphone>();
 
-			string curString = Marshal.PtrToStringAnsi(deviceList);
-			while (!String.IsNullOrEmpty(curString))
+			// Android has got some issue with alcGetString
+			string deviceListOverride = Environment.GetEnvironmentVariable("FNA_AUDIO_DEVICES_IN");
+			if (!String.IsNullOrEmpty(deviceListOverride))
 			{
-				microphones.Add(new Microphone(curString));
-				deviceList += curString.Length + 1;
-				curString = Marshal.PtrToStringAnsi(deviceList);
+				deviceListOverride = deviceListOverride.Trim();
+				int split = -1;
+				int splitPrev = 0;
+				while (split + 1 < deviceListOverride.Length && (split = deviceListOverride.IndexOf(':', split + 1)) >= 0)
+				{
+					if (split > 0 && deviceListOverride[split] == '\\')
+						continue; // Allow escaping :
+					microphones.Add(new Microphone(
+						deviceListOverride.Substring(splitPrev, split - splitPrev)
+					));
+					splitPrev = split + 1;
+				}
+			}
+			else
+			{
+				IntPtr deviceList = ALC10.alcGetString(IntPtr.Zero, ALC11.ALC_CAPTURE_DEVICE_SPECIFIER);
+
+				string curString = Marshal.PtrToStringAnsi(deviceList);
+				while (!String.IsNullOrEmpty(curString))
+				{
+					microphones.Add(new Microphone(curString));
+					deviceList += curString.Length + 1;
+					curString = Marshal.PtrToStringAnsi(deviceList);
+				}
 			}
 
 			return new ReadOnlyCollection<Microphone>(microphones);

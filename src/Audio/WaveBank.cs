@@ -190,10 +190,21 @@ namespace Microsoft.Xna.Framework.Audio
 				throw new ArgumentNullException("nonStreamingWaveBankFilename");
 			}
 
-			using (Stream stream = TitleContainer.OpenStream(nonStreamingWaveBankFilename))
-			using (BinaryReader reader = new BinaryReader(stream))
+			if (Environment.GetEnvironmentVariable("FNA_AUDIO_FORCE_STREAM") == "1")
 			{
-				LoadWaveBank(audioEngine, reader, false);
+				// For when you've got too less RAM...
+				INTERNAL_waveBankReader = new BinaryReader(
+					TitleContainer.OpenStream(nonStreamingWaveBankFilename)
+				);
+				LoadWaveBank(audioEngine, INTERNAL_waveBankReader, true);
+			}
+			else
+			{
+				using (Stream stream = TitleContainer.OpenStream(nonStreamingWaveBankFilename))
+				using (BinaryReader reader = new BinaryReader(stream))
+				{
+					LoadWaveBank(audioEngine, reader, false);
+				}
 			}
 		}
 

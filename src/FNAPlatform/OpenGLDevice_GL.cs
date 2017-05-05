@@ -130,6 +130,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			GL_RGB8 =				0x8051,
 			GL_RGBA8 =				0x8058,
 			GL_RGBA4 =				0x8056,
+			GL_RGB565 =             0x8D62,
 			GL_RGB5_A1 =				0x8057,
 			GL_RGB10_A2_EXT =			0x8059,
 			GL_RGBA16 =				0x805B,
@@ -197,24 +198,24 @@ namespace Microsoft.Xna.Framework.Graphics
 			// 3.2 Core Profile
 			GL_NUM_EXTENSIONS =			0x821D,
 			// Source Enum Values
-			GL_DEBUG_SOURCE_API_ARB =		0x8246,
-			GL_DEBUG_SOURCE_WINDOW_SYSTEM_ARB =	0x8247,
-			GL_DEBUG_SOURCE_SHADER_COMPILER_ARB =	0x8248,
-			GL_DEBUG_SOURCE_THIRD_PARTY_ARB =	0x8249,
-			GL_DEBUG_SOURCE_APPLICATION_ARB =	0x824A,
-			GL_DEBUG_SOURCE_OTHER_ARB =		0x824B,
+			GL_DEBUG_SOURCE_API =		0x8246, // same value for KHR as for ARB
+			GL_DEBUG_SOURCE_WINDOW_SYSTEM =	0x8247, // same value for KHR as for as ARB
+			GL_DEBUG_SOURCE_SHADER_COMPILER =	0x8248, // same value for KHR as for as ARB
+			GL_DEBUG_SOURCE_THIRD_PARTY =	0x8249, // same value for KHR as for as ARB
+			GL_DEBUG_SOURCE_APPLICATION =	0x824A, // same value for KHR as for as ARB
+			GL_DEBUG_SOURCE_OTHER =		0x824B, // same value for KHR as for as ARB
 			// Type Enum Values
-			GL_DEBUG_TYPE_ERROR_ARB =		0x824C,
-			GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR_ARB =	0x824D,
-			GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR_ARB =	0x824E,
-			GL_DEBUG_TYPE_PORTABILITY_ARB =		0x824F,
-			GL_DEBUG_TYPE_PERFORMANCE_ARB =		0x8250,
-			GL_DEBUG_TYPE_OTHER_ARB =		0x8251,
+			GL_DEBUG_TYPE_ERROR =		0x824C, // same value for KHR as for as ARB
+			GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR =	0x824D, // same for KHR as for value as ARB
+			GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR =	0x824E, // same for KHR as for value as ARB
+			GL_DEBUG_TYPE_PORTABILITY =		0x824F, // same value for KHR as for as ARB
+			GL_DEBUG_TYPE_PERFORMANCE =		0x8250, // same value for KHR as for as ARB
+			GL_DEBUG_TYPE_OTHER =		0x8251, // same value as for KHR as for ARB
 			// Severity Enum Values
-			GL_DEBUG_SEVERITY_HIGH_ARB =		0x9146,
-			GL_DEBUG_SEVERITY_MEDIUM_ARB =		0x9147,
-			GL_DEBUG_SEVERITY_LOW_ARB =		0x9148,
-			GL_DEBUG_SEVERITY_NOTIFICATION_ARB =	0x826B
+			GL_DEBUG_SEVERITY_HIGH =		0x9146, // same value for KHR as for as ARB
+			GL_DEBUG_SEVERITY_MEDIUM =		0x9147, // same value for KHR as for as ARB
+			GL_DEBUG_SEVERITY_LOW =		0x9148, // same value for KHR as for as ARB
+			GL_DEBUG_SEVERITY_NOTIFICATION = 0x826B // same value for KHR as for as ARB
 		}
 
 		// Entry Points
@@ -310,14 +311,14 @@ namespace Microsoft.Xna.Framework.Graphics
 		);
 		private ColorMask glColorMask;
 
-		private delegate void ColorMaskIndexedEXT(
+		private delegate void ColorMaskIndexed(
 			uint buf,
 			bool red,
 			bool green,
 			bool blue,
 			bool alpha
 		);
-		private ColorMaskIndexedEXT glColorMaskIndexedEXT;
+		private ColorMaskIndexed glColorMaskIndexed;
 
 		private delegate void SampleMaski(uint maskNumber, uint mask);
 		private SampleMaski glSampleMaski;
@@ -812,7 +813,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			DebugProc callback,
 			IntPtr userParam
 		);
-		private DebugMessageCallback glDebugMessageCallbackARB;
+		private DebugMessageCallback glDebugMessageCallback;
 
 		private delegate void DebugMessageControl(
 			GLenum source,
@@ -822,9 +823,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			IntPtr ids, // const GLuint*
 			bool enabled
 		);
-		private DebugMessageControl glDebugMessageControlARB;
+		private DebugMessageControl glDebugMessageControl;
 
-		// ARB_debug_output callback
+		// ARB_debug_output / KHR_debug callback
 		private delegate void DebugProc(
 			GLenum source,
 			GLenum type,
@@ -853,10 +854,10 @@ namespace Microsoft.Xna.Framework.Graphics
 				"\n\tSeverity: " +
 				severity.ToString()
 			);
-			if (type == GLenum.GL_DEBUG_TYPE_ERROR_ARB)
+			if (type == GLenum.GL_DEBUG_TYPE_ERROR)
 			{
 				FNALoggerEXT.LogError(err);
-				throw new InvalidOperationException("ARB_debug_output found an error.");
+				throw new InvalidOperationException("ARB_debug_output / KHR_debug found an error.");
 			}
 			FNALoggerEXT.LogWarn(err);
 		}
@@ -874,9 +875,9 @@ namespace Microsoft.Xna.Framework.Graphics
 		private void LoadGLEntryPoints()
 		{
 			string baseErrorString;
-			if (useES3)
+			if (versionES > 0)
 			{
-				baseErrorString = "OpenGL ES 3.0";
+				baseErrorString = string.Format("OpenGL ES {0}.0", versionES);
 			}
 			else
 			{
@@ -1070,7 +1071,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 
 			/* ARB_draw_elements_base_vertex is ideal! */
-			IntPtr ep = SDL.SDL_GL_GetProcAddress("glDrawRangeElementsBaseVertex");
+			// We need to check for the extension here, otherwise we get an unimplemented function. -ade
+			bool baseVertexOES = (versionES > 2) && SDL.SDL_GL_ExtensionSupported("OES_draw_elements_base_vertex") == SDL.SDL_bool.SDL_TRUE;
+			IntPtr ep = SDL.SDL_GL_GetProcAddress("glDrawRangeElementsBaseVertex" + (baseVertexOES ? "OES" : ""));
 			supportsBaseVertex = ep != IntPtr.Zero;
 			if (supportsBaseVertex)
 			{
@@ -1086,8 +1089,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			else
 			{
 				/* DrawRangeElements is better, but some ES3 targets don't have it. */
-				ep = SDL.SDL_GL_GetProcAddress("glDrawRangeElements");
-				if (ep != IntPtr.Zero)
+				if (((versionES == 0) || (versionES > 2)) &&
+					((ep = SDL.SDL_GL_GetProcAddress("glDrawRangeElements")) != IntPtr.Zero))
 				{
 					glDrawRangeElements = (DrawRangeElements) Marshal.GetDelegateForFunctionPointer(
 						ep,
@@ -1116,7 +1119,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			 * will certainly not have these.
 			 * -flibit
 			 */
-			if (useES3)
+			if (versionES > 0)
 			{
 				ep = SDL.SDL_GL_GetProcAddress("glPolygonMode");
 				if (ep != IntPtr.Zero)
@@ -1256,7 +1259,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 			catch
 			{
-				if (useES3)
+				if (versionES > 0)
 				{
 					FNALoggerEXT.LogWarn("Some non-ES functions failed to load. Beware...");
 				}
@@ -1347,11 +1350,16 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 				else
 				{
-					glDrawElementsInstanced = (DrawElementsInstanced) Marshal.GetDelegateForFunctionPointer(
-						SDL.SDL_GL_GetProcAddress("glDrawElementsInstanced"),
-						typeof(DrawElementsInstanced)
-					);
-					glDrawElementsInstancedBaseVertex = DrawElementsInstancedNoBase;
+					if ((versionES == 0) || (versionES > 2))
+					{
+						glDrawElementsInstanced = (DrawElementsInstanced)Marshal.GetDelegateForFunctionPointer(
+							SDL.SDL_GL_GetProcAddress("glDrawElementsInstanced"),
+							typeof(DrawElementsInstanced)
+						);
+						glDrawElementsInstancedBaseVertex = DrawElementsInstancedNoBase;
+					}
+					else
+						SupportsHardwareInstancing = false;
 				}
 			}
 			catch
@@ -1359,12 +1367,12 @@ namespace Microsoft.Xna.Framework.Graphics
 				SupportsHardwareInstancing = false;
 			}
 
-			/* EXT_draw_buffers2 is probably used by nobody. */
+			/* EXT_draw_buffers2 / OES_draw_buffers_indexed is probably used by nobody. */
 			try
 			{
-				glColorMaskIndexedEXT = (ColorMaskIndexedEXT) Marshal.GetDelegateForFunctionPointer(
-					SDL.SDL_GL_GetProcAddress("glColorMaskIndexedEXT"),
-					typeof(ColorMaskIndexedEXT)
+				glColorMaskIndexed = (ColorMaskIndexed) Marshal.GetDelegateForFunctionPointer(
+					SDL.SDL_GL_GetProcAddress("glColorMask" + ((versionES == 0) ? "IndexedEXT" : "iOES")),
+					typeof(ColorMaskIndexed)
 				);
 			}
 			catch
@@ -1418,24 +1426,34 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 
 #if DEBUG
-			/* ARB_debug_output, for debug contexts */
-			IntPtr messageCallback = SDL.SDL_GL_GetProcAddress("glDebugMessageCallbackARB");
-			IntPtr messageControl = SDL.SDL_GL_GetProcAddress("glDebugMessageControlARB");
-			if (messageCallback == IntPtr.Zero || messageControl == IntPtr.Zero)
+			/* ARB_debug_output / KHR_debug, for debug contexts */
+			// For KHR_debug, "[...] in an OpenGL ES context, all entry points [...] have a "KHR" suffix." -ade
+			IntPtr messageCallback = TryGetEPEXT("glDebugMessageCallback", "ARB", "KHR");
+			IntPtr messageControl = TryGetEPEXT("glDebugMessageControl", "ARB", "KHR");
+			if ((versionES > 0) && SDL.SDL_GL_ExtensionSupported("KHR_debug") != SDL.SDL_bool.SDL_TRUE)
+			{
+				/* SDL_GL_GetProcAddress sometimes gives functions which result in
+				 * "called unimplemented OpenGL ES API"
+				 * Let's just manually check for the extension.
+				 * -ade
+				 */
+				FNALoggerEXT.LogWarn("KHR_debug not supported!");
+			}
+			else if (messageCallback == IntPtr.Zero || messageControl == IntPtr.Zero)
 			{
 				FNALoggerEXT.LogWarn("ARB_debug_output not supported!");
 			}
 			else
 			{
-				glDebugMessageCallbackARB = (DebugMessageCallback) Marshal.GetDelegateForFunctionPointer(
+				glDebugMessageCallback = (DebugMessageCallback) Marshal.GetDelegateForFunctionPointer(
 					messageCallback,
 					typeof(DebugMessageCallback)
 				);
-				glDebugMessageControlARB = (DebugMessageControl) Marshal.GetDelegateForFunctionPointer(
+				glDebugMessageControl = (DebugMessageControl) Marshal.GetDelegateForFunctionPointer(
 					messageControl,
 					typeof(DebugMessageControl)
 				);
-				glDebugMessageControlARB(
+				glDebugMessageControl(
 					GLenum.GL_DONT_CARE,
 					GLenum.GL_DONT_CARE,
 					GLenum.GL_DONT_CARE,
@@ -1443,23 +1461,23 @@ namespace Microsoft.Xna.Framework.Graphics
 					IntPtr.Zero,
 					true
 				);
-				glDebugMessageControlARB(
+				glDebugMessageControl(
 					GLenum.GL_DONT_CARE,
-					GLenum.GL_DEBUG_TYPE_OTHER_ARB,
-					GLenum.GL_DEBUG_SEVERITY_LOW_ARB,
+					GLenum.GL_DEBUG_TYPE_OTHER,
+					GLenum.GL_DEBUG_SEVERITY_LOW,
 					0,
 					IntPtr.Zero,
 					false
 				);
-				glDebugMessageControlARB(
+				glDebugMessageControl(
 					GLenum.GL_DONT_CARE,
-					GLenum.GL_DEBUG_TYPE_OTHER_ARB,
-					GLenum.GL_DEBUG_SEVERITY_NOTIFICATION_ARB,
+					GLenum.GL_DEBUG_TYPE_OTHER,
+					GLenum.GL_DEBUG_SEVERITY_NOTIFICATION,
 					0,
 					IntPtr.Zero,
 					false
 				);
-				glDebugMessageCallbackARB(DebugCall, IntPtr.Zero);
+				glDebugMessageCallback(DebugCall, IntPtr.Zero);
 			}
 
 			/* GREMEDY_string_marker, for apitrace */
@@ -1484,6 +1502,16 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (result == IntPtr.Zero)
 			{
 				result = SDL.SDL_GL_GetProcAddress(ep + ext);
+			}
+			return result;
+		}
+
+		private IntPtr TryGetEPEXT(string ep, params string[] exts)
+		{
+			IntPtr result = SDL.SDL_GL_GetProcAddress(ep);
+			for (int i = 0; i < exts.Length && result == IntPtr.Zero; i++)
+			{
+				result = SDL.SDL_GL_GetProcAddress(ep + exts[i]);
 			}
 			return result;
 		}

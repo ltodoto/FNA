@@ -10,6 +10,7 @@
 #region Using Statements
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Media;
+using Microsoft.Xna.Framework.Input.Touch;
 #endregion
 
 namespace Microsoft.Xna.Framework
@@ -20,6 +21,9 @@ namespace Microsoft.Xna.Framework
 
 		internal static bool ActiveSongChanged;
 		internal static bool MediaStateChanged;
+
+		internal static GameTime GameTime;
+		internal static System.DateTime NullTime = new System.DateTime(0L);
 
 		#endregion
 
@@ -53,6 +57,17 @@ namespace Microsoft.Xna.Framework
 			{
 				MediaPlayer.OnMediaStateChanged();
 				MediaStateChanged = false;
+			}
+
+			// The TouchPanel needs to know the time for when touches arrive.
+			if (GameTime != null)
+			{
+				TouchPanel.INTERNAL_CurrentTimestamp = GameTime.TotalGameTime;
+			}
+			else
+			{
+				// Someone's using XNA / FNA without Game...
+				TouchPanel.INTERNAL_CurrentTimestamp = System.DateTime.Now - NullTime;
 			}
 		}
 

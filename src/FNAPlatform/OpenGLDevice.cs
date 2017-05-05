@@ -541,7 +541,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		#region Private Profile-specific Variables
 
-		private bool useES3;
+		private byte versionES;
 		private bool useCoreProfile;
 		private uint vao;
 
@@ -565,12 +565,21 @@ namespace Microsoft.Xna.Framework.Graphics
 			glContext = SDL.SDL_GL_CreateContext(
 				presentationParameters.DeviceWindowHandle
 			);
+			if (glContext == IntPtr.Zero)
+				throw new NoSuitableGraphicsDeviceException("SDL_GL_CreateContext failed: " +
+															SDL.SDL_GetError());
 
 			// Check for a possible ES context
 			int flags;
-			int es3Flag = (int) SDL.SDL_GLprofile.SDL_GL_CONTEXT_PROFILE_ES;
+			int esFlag = (int) SDL.SDL_GLprofile.SDL_GL_CONTEXT_PROFILE_ES;
 			SDL.SDL_GL_GetAttribute(SDL.SDL_GLattr.SDL_GL_CONTEXT_PROFILE_MASK, out flags);
-			useES3 = (flags & es3Flag) == es3Flag;
+			if ((flags & esFlag) == esFlag)
+			{
+				SDL.SDL_GL_GetAttribute(SDL.SDL_GLattr.SDL_GL_CONTEXT_MAJOR_VERSION, out flags);
+				versionES = (byte)flags;
+			}
+			else
+				versionES = 0;
 
 			// Check for a possible Core context
 			int coreFlag = (int) SDL.SDL_GLprofile.SDL_GL_CONTEXT_PROFILE_CORE;
@@ -666,6 +675,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					this,
 					presentationParameters.BackBufferWidth,
 					presentationParameters.BackBufferHeight,
+                    presentationParameters.BackBufferFormat,
 					presentationParameters.DepthStencilFormat,
 					presentationParameters.MultiSampleCount
 				);
@@ -715,11 +725,16 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			// Initialize render target FBO and state arrays
 			int numAttachments;
-			glGetIntegerv(GLenum.GL_MAX_DRAW_BUFFERS, out numAttachments);
-			numAttachments = Math.Min(
-				numAttachments,
-				GraphicsDevice.MAX_RENDERTARGET_BINDINGS
-			);
+			if ((versionES == 0) || (versionES > 2))
+			{
+				glGetIntegerv(GLenum.GL_MAX_DRAW_BUFFERS, out numAttachments);
+				numAttachments = Math.Min(
+					numAttachments,
+					GraphicsDevice.MAX_RENDERTARGET_BINDINGS
+				);
+			}
+			else
+				numAttachments = 1;
 			attachments = new uint[numAttachments];
 			attachmentTypes = new GLenum[numAttachments];
 			currentAttachments = new uint[numAttachments];
@@ -801,6 +816,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						this,
 						presentationParameters.BackBufferWidth,
 						presentationParameters.BackBufferHeight,
+                        presentationParameters.BackBufferFormat,
 						presentationParameters.DepthStencilFormat,
 						presentationParameters.MultiSampleCount
 					);
@@ -898,16 +914,20 @@ namespace Microsoft.Xna.Framework.Graphics
 					OpenGLBackbuffer glBack = Backbuffer as OpenGLBackbuffer;
 					if (glBack.Texture == 0)
 					{
+						GLenum glFormat = XNAToGL.TextureFormat[(int)glBack.Format];
+						GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+													XNAToGL.TextureFormat[(int)glBack.Format] :
+													XNAToGL.TextureInternalFormat[(int)glBack.Format];
 						glGenTextures(1, out glBack.Texture);
 						glBindTexture(GLenum.GL_TEXTURE_2D, glBack.Texture);
 						glTexImage2D(
 							GLenum.GL_TEXTURE_2D,
 							0,
-							(int) GLenum.GL_RGBA,
+							(int) glInternalFormat,
 							glBack.Width,
 							glBack.Height,
 							0,
-							GLenum.GL_RGBA,
+							glFormat,
 							GLenum.GL_UNSIGNED_BYTE,
 							IntPtr.Zero
 						);
@@ -1274,7 +1294,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					);
 				}
 
-				if (	blendState.ColorSourceBlend != srcBlend ||
+				if (blendState.ColorSourceBlend != srcBlend ||
 					blendState.ColorDestinationBlend != dstBlend ||
 					blendState.AlphaSourceBlend != srcBlendAlpha ||
 					blendState.AlphaDestinationBlend != dstBlendAlpha	)
@@ -1291,11 +1311,18 @@ namespace Microsoft.Xna.Framework.Graphics
 					);
 				}
 
-				if (	blendState.ColorBlendFunction != blendOp ||
+				if (blendState.ColorBlendFunction != blendOp ||
 					blendState.AlphaBlendFunction != blendOpAlpha	)
 				{
 					blendOp = blendState.ColorBlendFunction;
 					blendOpAlpha = blendState.AlphaBlendFunction;
+					if ((versionES > 0) && (versionES < 3))
+					{
+						if (blendOp > BlendFunction.ReverseSubtract)
+							blendOp = BlendFunction.Add;
+						if (blendOpAlpha > BlendFunction.ReverseSubtract)
+							blendOpAlpha = BlendFunction.Add;
+					}
 					glBlendEquationSeparate(
 						XNAToGL.BlendEquation[(int) blendOp],
 						XNAToGL.BlendEquation[(int) blendOpAlpha]
@@ -1325,7 +1352,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (blendState.ColorWriteChannels1 != colorWriteEnable1)
 			{
 				colorWriteEnable1 = blendState.ColorWriteChannels1;
-				glColorMaskIndexedEXT(
+				glColorMaskIndexed(
 					1,
 					(colorWriteEnable1 & ColorWriteChannels.Red) != 0,
 					(colorWriteEnable1 & ColorWriteChannels.Green) != 0,
@@ -1336,7 +1363,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (blendState.ColorWriteChannels2 != colorWriteEnable2)
 			{
 				colorWriteEnable2 = blendState.ColorWriteChannels2;
-				glColorMaskIndexedEXT(
+				glColorMaskIndexed(
 					2,
 					(colorWriteEnable2 & ColorWriteChannels.Red) != 0,
 					(colorWriteEnable2 & ColorWriteChannels.Green) != 0,
@@ -1347,7 +1374,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (blendState.ColorWriteChannels3 != colorWriteEnable3)
 			{
 				colorWriteEnable3 = blendState.ColorWriteChannels3;
-				glColorMaskIndexedEXT(
+				glColorMaskIndexed(
 					3,
 					(colorWriteEnable3 & ColorWriteChannels.Red) != 0,
 					(colorWriteEnable3 & ColorWriteChannels.Green) != 0,
@@ -1515,12 +1542,17 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				if ((actualMode == CullMode.None) != (cullFrontFace == CullMode.None))
 				{
-					ToggleGLState(GLenum.GL_CULL_FACE, actualMode != CullMode.None);
+					ToggleGLState(GLenum.GL_CULL_FACE, (versionES > 0) || (actualMode != CullMode.None));
 				}
 				cullFrontFace = actualMode;
 				if (cullFrontFace != CullMode.None)
 				{
 					glFrontFace(XNAToGL.FrontFace[(int) cullFrontFace]);
+				}
+				else if (versionES > 0)
+				{
+					// Qualcomm Profiler complains about lack of backface culling
+					glFrontFace(GLenum.GL_CCW);
 				}
 			}
 
@@ -1653,14 +1685,17 @@ namespace Microsoft.Xna.Framework.Graphics
 					XNAToGL.Wrap[(int) tex.WrapT]
 				);
 			}
-			if (sampler.AddressW != tex.WrapR)
+			if ((versionES == 0) || (versionES > 2))
 			{
-				tex.WrapR = sampler.AddressW;
-				glTexParameteri(
-					tex.Target,
-					GLenum.GL_TEXTURE_WRAP_R,
-					XNAToGL.Wrap[(int) tex.WrapR]
-				);
+				if (sampler.AddressW != tex.WrapR)
+				{
+					tex.WrapR = sampler.AddressW;
+					glTexParameteri(
+						tex.Target,
+						GLenum.GL_TEXTURE_WRAP_R,
+						XNAToGL.Wrap[(int)tex.WrapR]
+					);
+				}
 			}
 			if (	sampler.Filter != tex.Filter ||
 				sampler.MaxAnisotropy != tex.Anistropy	)
@@ -1679,32 +1714,37 @@ namespace Microsoft.Xna.Framework.Graphics
 						XNAToGL.MinMipFilter[(int) tex.Filter] :
 						XNAToGL.MinFilter[(int) tex.Filter]
 				);
-				glTexParameterf(
-					tex.Target,
-					GLenum.GL_TEXTURE_MAX_ANISOTROPY_EXT,
-					(tex.Filter == TextureFilter.Anisotropic) ?
-						Math.Max(tex.Anistropy, 1.0f) :
-						1.0f
-				);
+				if (versionES == 0)
+				{
+					glTexParameterf(
+						tex.Target,
+						GLenum.GL_TEXTURE_MAX_ANISOTROPY_EXT,
+						(tex.Filter == TextureFilter.Anisotropic) ?
+							Math.Max(tex.Anistropy, 1.0f) :
+							1.0f
+					);
+				}
 			}
-			if (sampler.MaxMipLevel != tex.MaxMipmapLevel)
+			if ((versionES == 0) || (versionES > 2))
 			{
-				tex.MaxMipmapLevel = sampler.MaxMipLevel;
-				glTexParameteri(
-					tex.Target,
-					GLenum.GL_TEXTURE_BASE_LEVEL,
-					tex.MaxMipmapLevel
-				);
-			}
-			if (sampler.MipMapLevelOfDetailBias != tex.LODBias)
-			{
-				System.Diagnostics.Debug.Assert(!useES3);
-				tex.LODBias = sampler.MipMapLevelOfDetailBias;
-				glTexParameterf(
-					tex.Target,
-					GLenum.GL_TEXTURE_LOD_BIAS,
-					tex.LODBias
-				);
+				if (sampler.MaxMipLevel != tex.MaxMipmapLevel)
+				{
+					tex.MaxMipmapLevel = sampler.MaxMipLevel;
+					glTexParameteri(
+						tex.Target,
+						GLenum.GL_TEXTURE_BASE_LEVEL,
+						tex.MaxMipmapLevel
+					);
+				}
+				if (sampler.MipMapLevelOfDetailBias != tex.LODBias)
+				{
+					tex.LODBias = sampler.MipMapLevelOfDetailBias;
+					glTexParameterf(
+						tex.Target,
+						GLenum.GL_TEXTURE_LOD_BIAS,
+						tex.LODBias
+					);
+				}
 			}
 
 			if (index != 0)
@@ -2370,11 +2410,14 @@ namespace Microsoft.Xna.Framework.Graphics
 				GLenum.GL_TEXTURE_WRAP_T,
 				XNAToGL.Wrap[(int) result.WrapT]
 			);
-			glTexParameteri(
-				result.Target,
-				GLenum.GL_TEXTURE_WRAP_R,
-				XNAToGL.Wrap[(int) result.WrapR]
-			);
+			if ((versionES == 0) || (versionES > 2))
+			{
+				glTexParameteri(
+					result.Target,
+					GLenum.GL_TEXTURE_WRAP_R,
+					XNAToGL.Wrap[(int)result.WrapR]
+				);
+			}
 			glTexParameteri(
 				result.Target,
 				GLenum.GL_TEXTURE_MAG_FILTER,
@@ -2387,18 +2430,21 @@ namespace Microsoft.Xna.Framework.Graphics
 					XNAToGL.MinMipFilter[(int) result.Filter] :
 					XNAToGL.MinFilter[(int) result.Filter]
 			);
-			glTexParameterf(
-				result.Target,
-				GLenum.GL_TEXTURE_MAX_ANISOTROPY_EXT,
-				(result.Filter == TextureFilter.Anisotropic) ? Math.Max(result.Anistropy, 1.0f) : 1.0f
-			);
-			glTexParameteri(
-				result.Target,
-				GLenum.GL_TEXTURE_BASE_LEVEL,
-				result.MaxMipmapLevel
-			);
-			if (!useES3)
+			if ((versionES == 0) || (versionES > 2))
 			{
+				if (versionES == 0)
+				{
+					glTexParameterf(
+						result.Target,
+						GLenum.GL_TEXTURE_MAX_ANISOTROPY_EXT,
+						(result.Filter == TextureFilter.Anisotropic) ? Math.Max(result.Anistropy, 1.0f) : 1.0f
+					);
+				}
+				glTexParameteri(
+					result.Target,
+					GLenum.GL_TEXTURE_BASE_LEVEL,
+					result.MaxMipmapLevel
+				);
 				glTexParameterf(
 					result.Target,
 					GLenum.GL_TEXTURE_LOD_BIAS,
@@ -2426,7 +2472,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			);
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
-			GLenum glInternalFormat = XNAToGL.TextureInternalFormat[(int) format];
+			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+										XNAToGL.TextureFormat[(int)format] :
+										XNAToGL.TextureInternalFormat[(int)format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				for (int i = 0; i < levelCount; i += 1)
@@ -2436,7 +2484,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					glCompressedTexImage2D(
 						GLenum.GL_TEXTURE_2D,
 						i,
-						(int) glInternalFormat,
+						(int)XNAToGL.TextureInternalFormat[(int)format],
 						levelWidth,
 						levelHeight,
 						0,
@@ -2490,7 +2538,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			);
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
-			GLenum glInternalFormat = XNAToGL.TextureInternalFormat[(int) format];
+			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+										XNAToGL.TextureFormat[(int)format] :
+										XNAToGL.TextureInternalFormat[(int)format];
 			GLenum glType = XNAToGL.TextureDataType[(int) format];
 			for (int i = 0; i < levelCount; i += 1)
 			{
@@ -2532,7 +2582,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			);
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
-			GLenum glInternalFormat = XNAToGL.TextureInternalFormat[(int) format];
+			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+										XNAToGL.TextureFormat[(int)format] :
+										XNAToGL.TextureInternalFormat[(int)format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				for (int i = 0; i < 6; i += 1)
@@ -2543,7 +2595,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						glCompressedTexImage2D(
 							GLenum.GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
 							l,
-							(int) glInternalFormat,
+							(int)XNAToGL.TextureInternalFormat[(int)format],
 							levelSize,
 							levelSize,
 							0,
@@ -2564,7 +2616,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						glTexImage2D(
 							GLenum.GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
 							l,
-							(int) glInternalFormat,
+							(int)glInternalFormat,
 							levelSize,
 							levelSize,
 							0,
@@ -3068,24 +3120,28 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			uint prevReadBuffer = currentReadFramebuffer;
 
+			OpenGLBackbuffer glBack = Backbuffer as OpenGLBackbuffer;
+			GLenum glFormat = XNAToGL.TextureFormat[(int)glBack.Format];
 			if (Backbuffer.MultiSampleCount > 0)
 			{
 				// We have to resolve the renderbuffer to a texture first.
 				uint prevDrawBuffer = currentDrawFramebuffer;
 
-				OpenGLBackbuffer glBack = Backbuffer as OpenGLBackbuffer;
 				if (glBack.Texture == 0)
 				{
+					GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+												XNAToGL.TextureFormat[(int)glBack.Format] :
+												XNAToGL.TextureInternalFormat[(int)glBack.Format];
 					glGenTextures(1, out glBack.Texture);
 					glBindTexture(GLenum.GL_TEXTURE_2D, glBack.Texture);
 					glTexImage2D(
 						GLenum.GL_TEXTURE_2D,
 						0,
-						(int) GLenum.GL_RGBA,
+						(int)glInternalFormat,
 						glBack.Width,
 						glBack.Height,
 						0,
-						GLenum.GL_RGBA,
+						glFormat,
 						GLenum.GL_UNSIGNED_BYTE,
 						IntPtr.Zero
 					);
@@ -3123,7 +3179,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				subY,
 				subW,
 				subH,
-				GLenum.GL_RGBA,
+				glFormat,
 				GLenum.GL_UNSIGNED_BYTE,
 				data
 			);
@@ -3166,8 +3222,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			int subH
 		) {
 			bool texUnbound = (	currentDrawBuffers != 1 ||
-						currentAttachments[0] != (texture as OpenGLTexture).Handle	);
-			if (texUnbound && !useES3)
+								currentAttachments[0] != (texture as OpenGLTexture).Handle	);
+			if (texUnbound && (versionES == 0))
 			{
 				return false;
 			}
@@ -3369,6 +3425,10 @@ namespace Microsoft.Xna.Framework.Graphics
 			ForceToMainThread(() => {
 #endif
 
+            GLenum glInternalFormat = XNAToGL.TextureInternalFormat[(int)format];
+            if ((glInternalFormat == GLenum.GL_RGB8) &&
+                (versionES > 0) && (versionES < 3))
+                glInternalFormat = GLenum.GL_RGB565;
 			glGenRenderbuffers(1, out handle);
 			glBindRenderbuffer(
 				GLenum.GL_RENDERBUFFER,
@@ -3379,7 +3439,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				glRenderbufferStorageMultisample(
 					GLenum.GL_RENDERBUFFER,
 					multiSampleCount,
-					XNAToGL.TextureInternalFormat[(int) format],
+					glInternalFormat,
 					width,
 					height
 				);
@@ -3388,7 +3448,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				glRenderbufferStorage(
 					GLenum.GL_RENDERBUFFER,
-					XNAToGL.TextureInternalFormat[(int) format],
+					glInternalFormat,
 					width,
 					height
 				);
@@ -3417,7 +3477,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			ForceToMainThread(() => {
 #endif
 
-			glGenRenderbuffers(1, out handle);
+            GLenum glDepthFormat = XNAToGL.DepthStorage[(int)format];
+            glGenRenderbuffers(1, out handle);
 			glBindRenderbuffer(
 				GLenum.GL_RENDERBUFFER,
 				handle
@@ -3427,7 +3488,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				glRenderbufferStorageMultisample(
 					GLenum.GL_RENDERBUFFER,
 					multiSampleCount,
-					XNAToGL.DepthStorage[(int) format],
+					glDepthFormat,
 					width,
 					height
 				);
@@ -3436,7 +3497,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				glRenderbufferStorage(
 					GLenum.GL_RENDERBUFFER,
-					XNAToGL.DepthStorage[(int) format],
+					glDepthFormat,
 					width,
 					height
 				);
@@ -3617,7 +3678,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 
 			int i;
-			for (i = 0; i < renderTargets.Length; i += 1)
+			int renderTargetCount = Math.Min(attachments.Length, renderTargets.Length);
+			for (i = 0; i < renderTargetCount; i += 1)
 			{
 				IGLRenderbuffer colorBuffer = (renderTargets[i].RenderTarget as IRenderTarget).ColorBuffer;
 				if (colorBuffer != null)
@@ -3640,7 +3702,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 
 			// Update the color attachments, DrawBuffers state
-			for (i = 0; i < renderTargets.Length; i += 1)
+			for (i = 0; i < renderTargetCount; i += 1)
 			{
 				if (attachments[i] != currentAttachments[i])
 				{
@@ -3703,7 +3765,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					currentAttachmentTypes[i] = attachmentTypes[i];
 				}
 			}
-			while (i < currentAttachments.Length)
+			for (; i < currentAttachments.Length;  i += 1)
 			{
 				if (currentAttachments[i] != 0)
 				{
@@ -3729,12 +3791,12 @@ namespace Microsoft.Xna.Framework.Graphics
 					currentAttachments[i] = 0;
 					currentAttachmentTypes[i] = GLenum.GL_TEXTURE_2D;
 				}
-				i += 1;
 			}
-			if (renderTargets.Length != currentDrawBuffers)
+			if (renderTargetCount != currentDrawBuffers)
 			{
-				glDrawBuffers(renderTargets.Length, drawBuffersArray);
-				currentDrawBuffers = renderTargets.Length;
+				if ((versionES == 0) || (versionES > 2))
+					glDrawBuffers(renderTargetCount, drawBuffersArray);
+				currentDrawBuffers = renderTargetCount;
 			}
 
 			// Update the depth/stencil attachment
@@ -4189,6 +4251,12 @@ namespace Microsoft.Xna.Framework.Graphics
 				private set;
 			}
 
+			public SurfaceFormat Format
+			{
+				get;
+				private set;
+			}
+
 			public DepthFormat DepthFormat
 			{
 				get;
@@ -4211,6 +4279,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				OpenGLDevice device,
 				int width,
 				int height,
+				SurfaceFormat format,
 				DepthFormat depthFormat,
 				int multiSampleCount
 			) {
@@ -4218,6 +4287,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				Height = height;
 
 				glDevice = device;
+				Format = format;
 				DepthFormat = depthFormat;
 				MultiSampleCount = multiSampleCount;
 				Texture = 0;
@@ -4229,6 +4299,10 @@ namespace Microsoft.Xna.Framework.Graphics
 				glDevice.BindFramebuffer(Handle);
 
 				// Create and attach the color buffer
+				GLenum glInternalFormat = XNAToGL.TextureInternalFormat[(int)format];
+				if ((glInternalFormat == GLenum.GL_RGB8) &&
+					(glDevice.versionES > 0) && (glDevice.versionES < 3))
+					glInternalFormat = GLenum.GL_RGB565;
 				glDevice.glGenRenderbuffers(1, out colorAttachment);
 				glDevice.glBindRenderbuffer(GLenum.GL_RENDERBUFFER, colorAttachment);
 				if (multiSampleCount > 0)
@@ -4236,7 +4310,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					glDevice.glRenderbufferStorageMultisample(
 						GLenum.GL_RENDERBUFFER,
 						multiSampleCount,
-						GLenum.GL_RGBA8,
+						glInternalFormat,
 						width,
 						height
 					);
@@ -4245,7 +4319,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				{
 					glDevice.glRenderbufferStorage(
 						GLenum.GL_RENDERBUFFER,
-						GLenum.GL_RGBA8,
+						glInternalFormat,
 						width,
 						height
 					);
@@ -4269,6 +4343,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 
 				// Create and attach the depth/stencil buffer
+				GLenum glDepthFormat = XNAToGL.DepthStorage[(int) depthFormat];
 				glDevice.glGenRenderbuffers(1, out depthStencilAttachment);
 				glDevice.glBindRenderbuffer(GLenum.GL_RENDERBUFFER, depthStencilAttachment);
 				if (multiSampleCount > 0)
@@ -4276,7 +4351,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					glDevice.glRenderbufferStorageMultisample(
 						GLenum.GL_RENDERBUFFER,
 						multiSampleCount,
-						XNAToGL.DepthStorage[(int) depthFormat],
+						glDepthFormat,
 						width,
 						height
 					);
@@ -4285,7 +4360,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				{
 					glDevice.glRenderbufferStorage(
 						GLenum.GL_RENDERBUFFER,
-						XNAToGL.DepthStorage[(int) depthFormat],
+						glDepthFormat,
 						width,
 						height
 					);
@@ -4335,6 +4410,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				Width = presentationParameters.BackBufferWidth;
 				Height = presentationParameters.BackBufferHeight;
 
+				SurfaceFormat format = presentationParameters.BackBufferFormat;
 				DepthFormat depthFormat = presentationParameters.DepthStencilFormat;
 				MultiSampleCount = presentationParameters.MultiSampleCount;
 				if (Texture != 0)
@@ -4379,6 +4455,10 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 
 				// Update our color attachment to the new resolution.
+				GLenum glInternalFormat = XNAToGL.TextureInternalFormat[(int)format];
+				if ((glInternalFormat == GLenum.GL_RGB8) &&
+					(glDevice.versionES > 0) && (glDevice.versionES < 3))
+					glInternalFormat = GLenum.GL_RGB565;
 				glDevice.glBindRenderbuffer(
 					GLenum.GL_RENDERBUFFER,
 					colorAttachment
@@ -4388,7 +4468,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					glDevice.glRenderbufferStorageMultisample(
 						GLenum.GL_RENDERBUFFER,
 						MultiSampleCount,
-						GLenum.GL_RGBA8,
+						glInternalFormat,
 						Width,
 						Height
 					);
@@ -4397,7 +4477,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				{
 					glDevice.glRenderbufferStorage(
 						GLenum.GL_RENDERBUFFER,
-						GLenum.GL_RGBA8,
+						glInternalFormat,
 						Width,
 						Height
 					);
@@ -4430,6 +4510,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 
 				// Update the depth/stencil buffer, if applicable
+				GLenum glDepthFormat = XNAToGL.DepthStorage[(int)depthFormat];
 				if (depthStencilAttachment != 0)
 				{
 					glDevice.glBindRenderbuffer(
@@ -4441,7 +4522,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						glDevice.glRenderbufferStorageMultisample(
 							GLenum.GL_RENDERBUFFER,
 							MultiSampleCount,
-							XNAToGL.DepthStorage[(int)depthFormat],
+							glDepthFormat,
 							Width,
 							Height
 						);
@@ -4450,7 +4531,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					{
 						glDevice.glRenderbufferStorage(
 							GLenum.GL_RENDERBUFFER,
-							XNAToGL.DepthStorage[(int)depthFormat],
+							glDepthFormat,
 							Width,
 							Height
 						);

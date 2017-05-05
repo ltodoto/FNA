@@ -30,6 +30,11 @@ namespace Microsoft.Xna.Framework
 		static TitleLocation()
 		{
 			Path = AppDomain.CurrentDomain.BaseDirectory;
+			string altTitleDir = Environment.GetEnvironmentVariable("FNA_TITLEDIR");
+			if (!String.IsNullOrEmpty(altTitleDir))
+			{
+				Path = altTitleDir;
+			}
 		}
 
 		#endregion
