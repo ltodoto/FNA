@@ -2484,7 +2484,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					glCompressedTexImage2D(
 						GLenum.GL_TEXTURE_2D,
 						i,
-						(int)XNAToGL.TextureInternalFormat[(int)format],
+						(int) glInternalFormat,
 						levelWidth,
 						levelHeight,
 						0,
@@ -2595,7 +2595,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						glCompressedTexImage2D(
 							GLenum.GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
 							l,
-							(int)XNAToGL.TextureInternalFormat[(int)format],
+							(int) glInternalFormat,
 							levelSize,
 							levelSize,
 							0,
@@ -2616,7 +2616,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						glTexImage2D(
 							GLenum.GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,
 							l,
-							(int)glInternalFormat,
+							(int) glInternalFormat,
 							levelSize,
 							levelSize,
 							0,
@@ -2658,6 +2658,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			BindTexture(texture);
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
+			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+										XNAToGL.TextureFormat[(int)format] :
+										XNAToGL.TextureInternalFormat[(int)format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				/* Note that we're using glInternalFormat, not glFormat.
@@ -2673,7 +2676,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					y,
 					w,
 					h,
-					XNAToGL.TextureInternalFormat[(int) format],
+					glInternalFormat,
 					elementCount * elementSizeInBytes,
 					data + (startIndex * elementSizeInBytes)
 				);
@@ -2776,6 +2779,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			BindTexture(texture);
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
+			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
+										XNAToGL.TextureFormat[(int)format] :
+										XNAToGL.TextureInternalFormat[(int)format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				/* Note that we're using glInternalFormat, not glFormat.
@@ -2791,7 +2797,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					yOffset,
 					width,
 					height,
-					XNAToGL.TextureInternalFormat[(int) format],
+					glInternalFormat,
 					elementCount * elementSizeInBytes,
 					data + (startIndex * elementSizeInBytes)
 				);
