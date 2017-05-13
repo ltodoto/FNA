@@ -2659,8 +2659,9 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
 			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
-										XNAToGL.TextureFormat[(int)format] :
-										XNAToGL.TextureInternalFormat[(int)format];
+										XNAToGL.TextureFormat[(int) format] :
+										XNAToGL.TextureInternalFormat[(int) format];
+			GLenum glType = XNAToGL.TextureDataType[(int) format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				/* Note that we're using glInternalFormat, not glFormat.
@@ -2701,7 +2702,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					w,
 					h,
 					glFormat,
-					XNAToGL.TextureDataType[(int) format],
+					glType,
 					data + (startIndex * elementSizeInBytes)
 				);
 
@@ -2740,6 +2741,8 @@ namespace Microsoft.Xna.Framework.Graphics
 #endif
 			BindTexture(texture);
 
+			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
+			GLenum glType = XNAToGL.TextureDataType[(int) format];
 			glTexSubImage3D(
 				GLenum.GL_TEXTURE_3D,
 				level,
@@ -2749,8 +2752,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				right - left,
 				bottom - top,
 				back - front,
-				XNAToGL.TextureFormat[(int) format],
-				XNAToGL.TextureDataType[(int) format],
+				glFormat,
+				glType,
 				data + (startIndex * elementSizeInBytes)
 			);
 
@@ -2780,8 +2783,9 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
 			GLenum glInternalFormat = (versionES > 0) && (versionES < 3) ?
-										XNAToGL.TextureFormat[(int)format] :
-										XNAToGL.TextureInternalFormat[(int)format];
+										XNAToGL.TextureFormat[(int) format] :
+										XNAToGL.TextureInternalFormat[(int) format];
+			GLenum glType = XNAToGL.TextureDataType[(int) format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				/* Note that we're using glInternalFormat, not glFormat.
@@ -2812,7 +2816,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					width,
 					height,
 					glFormat,
-					XNAToGL.TextureDataType[(int) format],
+					glType,
 					data + (startIndex * elementSizeInBytes)
 				);
 			}
@@ -2827,6 +2831,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			IntPtr ptr
 		) {
 			BindTexture(texture.texture);
+			GLenum glFormat = XNAToGL.TextureFormat[(int) texture.Format];
+			GLenum glType = XNAToGL.TextureDataType[(int) texture.Format];
 			// Set pixel alignment to match texel size in bytes
 			int packSize = Texture.GetFormatSize(texture.Format);
 			if (packSize != 4)
@@ -2843,8 +2849,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				0,
 				texture.Width,
 				texture.Height,
-				XNAToGL.TextureFormat[(int) texture.Format],
-				XNAToGL.TextureDataType[(int) texture.Format],
+				glFormat,
+				glType,
 				ptr
 			);
 			// Keep this state sane -flibit
@@ -2893,6 +2899,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			BindTexture(texture);
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
+			GLenum glType = XNAToGL.TextureDataType[(int) format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				throw new NotImplementedException("GetData, CompressedTexture");
@@ -2904,7 +2911,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					GLenum.GL_TEXTURE_2D,
 					level,
 					glFormat,
-					XNAToGL.TextureDataType[(int) format],
+					glType,
 					data
 				);
 			}
@@ -2916,7 +2923,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					GLenum.GL_TEXTURE_2D,
 					level,
 					glFormat,
-					XNAToGL.TextureDataType[(int) format],
+					glType,
 					texData
 				);
 
@@ -2992,6 +2999,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			BindTexture(texture);
 			GLenum glFormat = XNAToGL.TextureFormat[(int) format];
+			GLenum glType = XNAToGL.TextureDataType[(int) format];
 			if (glFormat == GLenum.GL_COMPRESSED_TEXTURE_FORMATS)
 			{
 				throw new NotImplementedException("GetData, CompressedTexture");
@@ -3003,7 +3011,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					GLenum.GL_TEXTURE_CUBE_MAP_POSITIVE_X + (int) cubeMapFace,
 					level,
 					glFormat,
-					XNAToGL.TextureDataType[(int) format],
+					glType,
 					data
 				);
 			}
@@ -3015,7 +3023,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					GLenum.GL_TEXTURE_CUBE_MAP_POSITIVE_X + (int) cubeMapFace,
 					level,
 					glFormat,
-					XNAToGL.TextureDataType[(int) format],
+					glType,
 					texData
 				);
 
