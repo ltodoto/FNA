@@ -27,7 +27,7 @@ namespace Microsoft.Xna.Framework
 	{
 		#region Static Constants
 
-		private static readonly string OSVersion = SDL.SDL_GetPlatformNative();
+		private static string OSVersion;
 
 		private static readonly bool UseScancodes = Environment.GetEnvironmentVariable(
 			"FNA_KEYBOARD_USE_SCANCODES"
@@ -39,6 +39,19 @@ namespace Microsoft.Xna.Framework
 
 		public static void ProgramInit()
 		{
+			// This is how we can weed out cases where fnalibs is missing
+			try
+			{
+				OSVersion = SDL.INTERNAL_SDL_GetPlatform();
+			}
+			catch(Exception e)
+			{
+				FNALoggerEXT.LogError(
+					"SDL2 was not found! Do you have fnalibs?"
+				);
+				throw e;
+			}
+
 			/* SDL2 might complain if an OS that uses SDL_main has not actually
 			 * used SDL_main by the time you initialize SDL2.
 			 * The only platform that is affected is Windows, but we can skip
@@ -48,7 +61,8 @@ namespace Microsoft.Xna.Framework
 			SDL.SDL_SetMainReady();
 
 			// Also, Windows is an idiot. -flibit
-			if (	OSVersion.Equals("Windows") &&
+			if (	(	OSVersion.Equals("Windows") ||
+					OSVersion.Equals("WinRT")	) &&
 				System.Diagnostics.Debugger.IsAttached	)
 			{
 				SDL.SDL_SetHint(
@@ -133,6 +147,15 @@ namespace Microsoft.Xna.Framework
 			string forceES = Environment.GetEnvironmentVariable("FNA_OPENGL_FORCE_ES");
 			byte forceESVersion = string.IsNullOrEmpty(forceES) ? (byte)0 : byte.Parse(forceES);
 			bool forceCoreProfile = Environment.GetEnvironmentVariable("FNA_OPENGL_FORCE_CORE_PROFILE") == "1";
+
+			// Some platforms are GLES only
+			forceES3 |= (
+				OSVersion.Equals("WinRT") ||
+				OSVersion.Equals("iOS") ||
+				OSVersion.Equals("tvOS") ||
+				OSVersion.Equals("Android") ||
+				OSVersion.Equals("Emscripten")
+			);
 
 			// Set and initialize the SDL2 window
 			SDL.SDL_WindowFlags initFlags = (
@@ -323,21 +346,6 @@ namespace Microsoft.Xna.Framework
 				clientHeight /= 2;
 			}
 
-			// Fullscreen
-			if (	wantsFullscreen &&
-				(SDL.SDL_GetWindowFlags(window) & (uint) SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN) == 0 &&
-				OSVersion.Equals("Mac OS X")	)
-			{
-				/* FIXME: SDL2/OSX bug!
-				 * For whatever reason, Spaces windows on OSX
-				 * like to be high-DPI if you set fullscreen
-				 * while the window is hidden. But, if you just
-				 * show the window first, everything is fine.
-				 * -flibit
-				 */
-				SDL.SDL_ShowWindow(window);
-			}
-
 			// When windowed, set the size before moving
 			if (!wantsFullscreen)
 			{
@@ -397,6 +405,20 @@ namespace Microsoft.Xna.Framework
 			// Set fullscreen after we've done all the ugly stuff.
 			if (wantsFullscreen)
 			{
+				if ((SDL.SDL_GetWindowFlags(window) & (uint) SDL.SDL_WindowFlags.SDL_WINDOW_SHOWN) == 0)
+				{
+					/* If we're still hidden, we can't actually go fullscreen yet.
+					 * But, we can at least set the hidden window size to match
+					 * what the window/drawable sizes will eventually be later.
+					 * -flibit
+					 */
+					SDL.SDL_DisplayMode mode;
+					SDL.SDL_GetCurrentDisplayMode(
+						displayIndex,
+						out mode
+					);
+					SDL.SDL_SetWindowSize(window, mode.w, mode.h);
+				}
 				SDL.SDL_SetWindowFullscreen(
 					window,
 					(uint) SDL.SDL_WindowFlags.SDL_WINDOW_FULLSCREEN_DESKTOP
@@ -584,7 +606,9 @@ namespace Microsoft.Xna.Framework
 			 * WM_PAINT events correctly. So we get to do this!
 			 * -flibit
 			 */
-			if (OSVersion.Equals("Windows") && game.Window.AllowUserResizing)
+			if (	(	OSVersion.Equals("Windows") ||
+					OSVersion.Equals("WinRT")	) &&
+				game.Window.AllowUserResizing	)
 			{
 				quickDrawFunc = game.RedrawWindow;
 				SDL.SDL_SetEventFilter(
@@ -688,6 +712,10 @@ namespace Microsoft.Xna.Framework
 					}
 
 					// Mouse Input
+					else if (evt.type == SDL.SDL_EventType.SDL_MOUSEBUTTONDOWN)
+					{
+						Mouse.INTERNAL_onClicked(evt.button.button - 1);
+					}
 					else if (evt.type == SDL.SDL_EventType.SDL_MOUSEWHEEL)
 					{
 						// 120 units per notch. Because reasons.
@@ -888,9 +916,12 @@ namespace Microsoft.Xna.Framework
 		{
 			if (interval == PresentInterval.Default || interval == PresentInterval.One)
 			{
-				if (OSVersion.Equals("Mac OS X"))
+				bool disableLateSwapTear = (
+					OSVersion.Equals("Mac OS X") ||
+					Environment.GetEnvironmentVariable("FNA_OPENGL_DISABLE_LATESWAPTEAR") == "1"
+				);
+				if (disableLateSwapTear)
 				{
-					// Apple is a big fat liar about swap_control_tear. Use stock VSync.
 					SDL.SDL_GL_SetSwapInterval(1);
 				}
 				else
@@ -1118,7 +1149,7 @@ namespace Microsoft.Xna.Framework
 			{
 				return altConfigDir;
 			}
-			if (OSVersion.Equals("Windows"))
+			if (OSVersion.Equals("Windows") || OSVersion.Equals("WinRT"))
 			{
 				return Path.Combine(
 					Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -1539,10 +1570,18 @@ namespace Microsoft.Xna.Framework
 			}
 		};
 
-		// FIXME: SDL_GameController config input inversion!
-		private static float invertAxis = Environment.GetEnvironmentVariable(
-			"FNA_WORKAROUND_INVERT_YAXIS"
-		) == "1" ? -1.0f : 1.0f;
+		private static readonly GamePadType[] INTERNAL_gamepadType = new GamePadType[]
+		{
+			GamePadType.Unknown,
+			GamePadType.GamePad,
+			GamePadType.Wheel,
+			GamePadType.ArcadeStick,
+			GamePadType.FlightStick,
+			GamePadType.DancePad,
+			GamePadType.Guitar,
+			GamePadType.DrumKit,
+			GamePadType.BigButtonPad
+		};
 
 		public static GamePadCapabilities GetGamePadCapabilities(int index)
 		{
@@ -1573,7 +1612,7 @@ namespace Microsoft.Xna.Framework
 				(float) SDL.SDL_GameControllerGetAxis(
 					device,
 					SDL.SDL_GameControllerAxis.SDL_CONTROLLER_AXIS_LEFTY
-				) / -32767.0f * invertAxis
+				) / -32767.0f
 			);
 			Vector2 stickRight = new Vector2(
 				(float) SDL.SDL_GameControllerGetAxis(
@@ -1583,7 +1622,7 @@ namespace Microsoft.Xna.Framework
 				(float) SDL.SDL_GameControllerGetAxis(
 					device,
 					SDL.SDL_GameControllerAxis.SDL_CONTROLLER_AXIS_RIGHTY
-				) / -32767.0f * invertAxis
+				) / -32767.0f
 			);
 			gc_buttonState |= READ_StickToButtons(
 				stickLeft,
@@ -1860,6 +1899,7 @@ namespace Microsoft.Xna.Framework
 			// An SDL_GameController _should_ always be complete...
 			INTERNAL_capabilities[which] = new GamePadCapabilities()
 			{
+				GamePadType = INTERNAL_gamepadType[(int) SDL.SDL_JoystickGetType(thisJoystick)],
 				IsConnected = true,
 				HasAButton = true,
 				HasBButton = true,
@@ -1887,62 +1927,14 @@ namespace Microsoft.Xna.Framework
 				HasVoiceSupport = false
 			};
 
-			// Store the GUID string for this device
-			StringBuilder result = new StringBuilder();
-			byte[] resChar = new byte[33]; // FIXME: Sort of arbitrary.
-			SDL.SDL_JoystickGetGUIDString(
-				SDL.SDL_JoystickGetGUID(thisJoystick),
-				resChar,
-				resChar.Length
-			);
-			if (OSVersion.Equals("Linux"))
+			/* Store the GUID string for this device
+			 * FIXME: Replace GetGUIDEXT string with 3 short values -flibit
+			 */
+			ushort vendor = SDL.SDL_JoystickGetVendor(thisJoystick);
+			ushort product = SDL.SDL_JoystickGetProduct(thisJoystick);
+			if (vendor == 0x00 && product == 0x00)
 			{
-				result.Append((char) resChar[8]);
-				result.Append((char) resChar[9]);
-				result.Append((char) resChar[10]);
-				result.Append((char) resChar[11]);
-				result.Append((char) resChar[16]);
-				result.Append((char) resChar[17]);
-				result.Append((char) resChar[18]);
-				result.Append((char) resChar[19]);
-			}
-			else if (OSVersion.Equals("Mac OS X"))
-			{
-				result.Append((char) resChar[0]);
-				result.Append((char) resChar[1]);
-				result.Append((char) resChar[2]);
-				result.Append((char) resChar[3]);
-				result.Append((char) resChar[16]);
-				result.Append((char) resChar[17]);
-				result.Append((char) resChar[18]);
-				result.Append((char) resChar[19]);
-			}
-			else if (OSVersion.Equals("Windows"))
-			{
-				bool isXInput = true;
-				foreach (byte b in resChar)
-				{
-					if (((char) b) != '0' && b != 0)
-					{
-						isXInput = false;
-						break;
-					}
-				}
-				if (isXInput)
-				{
-					result.Append("xinput");
-				}
-				else
-				{
-					result.Append((char) resChar[0]);
-					result.Append((char) resChar[1]);
-					result.Append((char) resChar[2]);
-					result.Append((char) resChar[3]);
-					result.Append((char) resChar[4]);
-					result.Append((char) resChar[5]);
-					result.Append((char) resChar[6]);
-					result.Append((char) resChar[7]);
-				}
+				INTERNAL_guids[which] = "xinput";
 			}
 			else if (OSVersion.Equals("Android"))
 			{
@@ -1959,21 +1951,28 @@ namespace Microsoft.Xna.Framework
 			}
 			else
 			{
-				throw new NotSupportedException("Unhandled SDL2 platform!");
+				INTERNAL_guids[which] = string.Format(
+					"{0:x2}{1:x2}{2:x2}{3:x2}",
+					vendor & 0xFF,
+					vendor >> 8,
+					product & 0xFF,
+					product >> 8
+				);
 			}
-			INTERNAL_guids[which] = result.ToString();
 
 			// Initialize light bar
 			if (	OSVersion.Equals("Linux") &&
-				INTERNAL_guids[which].Equals("4c05c405")	)
+				(	INTERNAL_guids[which].Equals("4c05c405") ||
+					INTERNAL_guids[which].Equals("4c05cc09")	)	)
 			{
 				// Get all of the individual PS4 LED instances
 				List<string> ledList = new List<string>();
 				string[] dirs = Directory.GetDirectories("/sys/class/leds/");
 				foreach (string dir in dirs)
 				{
-					if (	dir.Contains("054C:05C4") &&
-						dir.EndsWith("blue")	)
+					if (	dir.EndsWith("blue") &&
+						(	dir.Contains("054C:05C4") ||
+							dir.Contains("054C:09CC")	)	)
 					{
 						ledList.Add(dir.Substring(0, dir.LastIndexOf(':') + 1));
 					}
@@ -2507,8 +2506,6 @@ namespace Microsoft.Xna.Framework
 		private static SDL.SDL_EventFilter win32OnPaint = Win32OnPaint;
 		private delegate void QuickDrawFunc();
 		private static QuickDrawFunc quickDrawFunc;
-		[DllImport("user32.dll", CallingConvention = CallingConvention.StdCall)]
-		private static extern int InvalidateRect(IntPtr hwnd, IntPtr rect, int erase);
 		private static unsafe int Win32OnPaint(IntPtr func, IntPtr evtPtr)
 		{
 			SDL.SDL_Event* evt = (SDL.SDL_Event*) evtPtr;

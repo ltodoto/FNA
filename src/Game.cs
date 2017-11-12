@@ -37,6 +37,7 @@ using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
+using Microsoft.Xna.Framework.Input.Touch;
 #endregion
 
 namespace Microsoft.Xna.Framework
@@ -275,6 +276,7 @@ namespace Microsoft.Xna.Framework
 
 			Window = FNAPlatform.CreateWindow();
 			Mouse.WindowHandle = Window.Handle;
+			TouchPanel.WindowHandle = Window.Handle;
 
 			// FrameworkDispatcher.Update should be time-less, yet touch input needs time.
 			FrameworkDispatcher.GameTime = gameTime;

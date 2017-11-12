@@ -2202,6 +2202,17 @@ namespace Microsoft.Xna.Framework.Graphics
 			int elementSizeInBytes,
 			int vertexStride
 		) {
+			IntPtr cpy;
+			bool useStagingBuffer = elementSizeInBytes < vertexStride;
+			if (useStagingBuffer)
+			{
+				cpy = Marshal.AllocHGlobal(elementCount * vertexStride);
+			}
+			else
+			{
+				cpy = data + (startIndex * elementSizeInBytes);
+			}
+
 #if !DISABLE_THREADING
 			ForceToMainThread(() => {
 #endif
@@ -2210,12 +2221,25 @@ namespace Microsoft.Xna.Framework.Graphics
 				(buffer as OpenGLBuffer).Handle,
 				(IntPtr) offsetInBytes,
 				(IntPtr) (elementCount * vertexStride),
-				data + (startIndex * elementSizeInBytes)
+				cpy
 			);
 
 #if !DISABLE_THREADING
 			});
 #endif
+
+			if (useStagingBuffer)
+			{
+				IntPtr src = cpy;
+				IntPtr dst = data + (startIndex * elementSizeInBytes);
+				for (int i = 0; i < elementCount; i += 1)
+				{
+					memcpy(dst, src, (IntPtr) elementSizeInBytes);
+					dst += elementSizeInBytes;
+					src += vertexStride;
+				}
+				Marshal.FreeHGlobal(cpy);
+			}
 		}
 
 		public void GetIndexBufferData(
@@ -3116,11 +3140,25 @@ namespace Microsoft.Xna.Framework.Graphics
 		private void DeleteRenderbuffer(IGLRenderbuffer renderbuffer)
 		{
 			uint handle = (renderbuffer as OpenGLRenderbuffer).Handle;
+
+			// Check color attachments
+			for (int i = 0; i < currentAttachments.Length; i += 1)
+			{
+				if (handle == currentAttachments[i])
+				{
+					// Force an attachment update, this no longer exists!
+					currentAttachments[i] = uint.MaxValue;
+				}
+			}
+
+			// Check depth/stencil attachment
 			if (handle == currentRenderbuffer)
 			{
 				// Force a renderbuffer update, this no longer exists!
 				currentRenderbuffer = uint.MaxValue;
 			}
+
+			// Finally.
 			glDeleteRenderbuffers(1, ref handle);
 		}
 
@@ -3525,7 +3563,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			public static readonly GLenum[] TextureInternalFormat = new GLenum[]
 			{
 				GLenum.GL_RGBA8,				// SurfaceFormat.Color
-				GLenum.GL_RGB8,					// SurfaceFormat.Bgr565
+				GLenum.GL_RGB565,				// SurfaceFormat.Bgr565
 				GLenum.GL_RGB5_A1,				// SurfaceFormat.Bgra5551
 				GLenum.GL_RGBA4,				// SurfaceFormat.Bgra4444
 				GLenum.GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,	// SurfaceFormat.Dxt1
@@ -3551,14 +3589,14 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				GLenum.GL_UNSIGNED_BYTE,			// SurfaceFormat.Color
 				GLenum.GL_UNSIGNED_SHORT_5_6_5,			// SurfaceFormat.Bgr565
-				GLenum.GL_UNSIGNED_SHORT_5_5_5_1,		// SurfaceFormat.Bgra5551
-				GLenum.GL_UNSIGNED_SHORT_4_4_4_4,		// SurfaceFormat.Bgra4444
+				GLenum.GL_UNSIGNED_SHORT_5_5_5_1_REV,		// SurfaceFormat.Bgra5551
+				GLenum.GL_UNSIGNED_SHORT_4_4_4_4_REV,		// SurfaceFormat.Bgra4444
 				GLenum.GL_ZERO,					// NOPE
 				GLenum.GL_ZERO,					// NOPE
 				GLenum.GL_ZERO,					// NOPE
 				GLenum.GL_BYTE,					// SurfaceFormat.NormalizedByte2
 				GLenum.GL_BYTE,					// SurfaceFormat.NormalizedByte4
-				GLenum.GL_UNSIGNED_INT_10_10_10_2,		// SurfaceFormat.Rgba1010102
+				GLenum.GL_UNSIGNED_INT_2_10_10_10_REV,		// SurfaceFormat.Rgba1010102
 				GLenum.GL_UNSIGNED_SHORT,			// SurfaceFormat.Rg32
 				GLenum.GL_UNSIGNED_SHORT,			// SurfaceFormat.Rgba64
 				GLenum.GL_UNSIGNED_BYTE,			// SurfaceFormat.Alpha8
