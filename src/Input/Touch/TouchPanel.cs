@@ -117,12 +117,11 @@ namespace Microsoft.Xna.Framework.Input.Touch
 		/// not be considered to have moved.
 		/// </summary>
 		internal const float TapJitterTolerance = 35.0f;
-
 		internal static readonly TimeSpan TimeRequiredForHold = TimeSpan.FromMilliseconds(1024);
-
 		internal static readonly Queue<GestureSample> GestureList = new Queue<GestureSample>();
 
-		internal static GameWindow INTERNAL_Window;
+		internal static int INTERNAL_WindowWidth = GraphicsDeviceManager.DefaultBackBufferWidth;
+		internal static int INTERNAL_WindowHeight = GraphicsDeviceManager.DefaultBackBufferHeight;
 		
 		/// <summary>
 		/// The mapping between platform specific touch ids
@@ -333,8 +332,8 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			/* Add the new touch event keeping the list from getting
 			 * too large if no one happens to be requesting the state.
 			 */
-			position.X *= 0 < DisplayWidth ? DisplayWidth : INTERNAL_Window.ClientBounds.Width;
-			position.Y *= 0 < DisplayHeight ? DisplayHeight : INTERNAL_Window.ClientBounds.Height;
+			position.X *= 0 < DisplayWidth ? DisplayWidth : INTERNAL_WindowWidth;
+			position.Y *= 0 < DisplayHeight ? DisplayHeight : INTERNAL_WindowHeight;
 			TouchLocation evt = new TouchLocation(
 				touchId,
 				state,

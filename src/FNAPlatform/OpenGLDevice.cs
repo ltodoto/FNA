@@ -1557,17 +1557,12 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				if ((actualMode == CullMode.None) != (cullFrontFace == CullMode.None))
 				{
-					ToggleGLState(GLenum.GL_CULL_FACE, (versionES > 0) || (actualMode != CullMode.None));
+					ToggleGLState(GLenum.GL_CULL_FACE, actualMode != CullMode.None);
 				}
 				cullFrontFace = actualMode;
 				if (cullFrontFace != CullMode.None)
 				{
 					glFrontFace(XNAToGL.FrontFace[(int) cullFrontFace]);
-				}
-				else if (versionES > 0)
-				{
-					// Qualcomm Profiler complains about lack of backface culling
-					glFrontFace(GLenum.GL_CCW);
 				}
 			}
 

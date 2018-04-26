@@ -20,6 +20,7 @@ using SDL2;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Input.Touch;
 #endregion
 
 namespace Microsoft.Xna.Framework
@@ -645,6 +646,8 @@ namespace Microsoft.Xna.Framework
 			Rectangle windowBounds = game.Window.ClientBounds;
 			Mouse.INTERNAL_WindowWidth = windowBounds.Width;
 			Mouse.INTERNAL_WindowHeight = windowBounds.Height;
+			TouchPanel.INTERNAL_WindowWidth = windowBounds.Width;
+			TouchPanel.INTERNAL_WindowHeight = windowBounds.Height;
 
 			// Which display did we end up on?
 			int displayIndex = SDL.SDL_GetWindowDisplayIndex(
@@ -759,6 +762,44 @@ namespace Microsoft.Xna.Framework
 						Mouse.INTERNAL_MouseWheel += evt.wheel.y * 120;
 					}
 
+					// Touch Input
+					else if (evt.type == SDL.SDL_EventType.SDL_FINGERDOWN)
+					{
+						TouchPanel.AddEvent(
+							(int) evt.tfinger.fingerId,
+							TouchLocationState.Pressed,
+							new Vector2(
+								evt.tfinger.x,
+								evt.tfinger.y
+							),
+							evt.tfinger.pressure
+						);
+					}
+					else if (evt.type == SDL.SDL_EventType.SDL_FINGERUP)
+					{
+						TouchPanel.AddEvent(
+							(int) evt.tfinger.fingerId,
+							TouchLocationState.Released,
+							new Vector2(
+								evt.tfinger.x,
+								evt.tfinger.y
+							),
+							evt.tfinger.pressure
+						);
+					}
+					else if (evt.type == SDL.SDL_EventType.SDL_FINGERMOTION)
+					{
+						TouchPanel.AddEvent(
+							(int) evt.tfinger.fingerId,
+							TouchLocationState.Moved,
+							new Vector2(
+								evt.tfinger.x,
+								evt.tfinger.y
+							),
+							evt.tfinger.pressure
+						);
+					}
+
 					// Various Window Events...
 					else if (evt.type == SDL.SDL_EventType.SDL_WINDOWEVENT)
 					{
@@ -799,7 +840,8 @@ namespace Microsoft.Xna.Framework
 						{
 							Mouse.INTERNAL_WindowWidth = evt.window.data1;
 							Mouse.INTERNAL_WindowHeight = evt.window.data2;
-
+							TouchPanel.INTERNAL_WindowWidth = evt.window.data1;
+							TouchPanel.INTERNAL_WindowHeight = evt.window.data2;
 							/* This should be called on user resize only, NOT ApplyChanges!
 							 * Also ignore any other "resizes" (alt-tab, fullscreen, etc.)
 							 * -flibit
@@ -813,6 +855,8 @@ namespace Microsoft.Xna.Framework
 						{
 							Mouse.INTERNAL_WindowWidth = evt.window.data1;
 							Mouse.INTERNAL_WindowHeight = evt.window.data2;
+							TouchPanel.INTERNAL_WindowWidth = evt.window.data1;
+							TouchPanel.INTERNAL_WindowHeight = evt.window.data2;
 						}
 						else if (evt.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_EXPOSED)
 						{
