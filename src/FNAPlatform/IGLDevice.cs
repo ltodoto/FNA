@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -293,9 +293,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			IGLBuffer buffer,
 			int offsetInBytes,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes,
+			int dataLength,
 			SetDataOptions options
 		);
 		void GetVertexBufferData(
@@ -318,9 +316,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			IGLBuffer buffer,
 			int offsetInBytes,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes,
+			int dataLength,
 			SetDataOptions options
 		);
 		void GetIndexBufferData(
@@ -339,12 +335,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			IGLEffect effect,
 			IntPtr technique,
 			uint pass,
-			ref MojoShader.MOJOSHADER_effectStateChanges stateChanges
+			IntPtr stateChanges
 		);
-		void BeginPassRestore(
-			IGLEffect effect,
-			ref MojoShader.MOJOSHADER_effectStateChanges changes
-		);
+		void BeginPassRestore(IGLEffect effect, IntPtr stateChanges);
 		void EndPassRestore(IGLEffect effect);
 
 		void ApplyVertexAttributes(

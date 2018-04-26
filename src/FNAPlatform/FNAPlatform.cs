@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -53,6 +53,7 @@ namespace Microsoft.Xna.Framework
 			GetKeyFromScancode =		SDL2_FNAPlatform.GetKeyFromScancode;
 			StartTextInput =		SDL2.SDL.SDL_StartTextInput;
 			StopTextInput =			SDL2.SDL.SDL_StopTextInput;
+			SetTextInputRectangle =		SDL2_FNAPlatform.SetTextInputRectangle;
 			GetMouseState =			SDL2_FNAPlatform.GetMouseState;
 			SetMousePosition =		SDL2.SDL.SDL_WarpMouseInWindow;
 			OnIsMouseVisibleChanged =	SDL2_FNAPlatform.OnIsMouseVisibleChanged;
@@ -66,10 +67,12 @@ namespace Microsoft.Xna.Framework
 			HasTouch =			SDL2_FNAPlatform.HasTouch;
 			IsOnTouchPlatform =		SDL2_FNAPlatform.IsOnTouchPlatform;
 			GetMaximumTouchCount =		SDL2_FNAPlatform.GetMaximumTouchCount;
+			GetBaseDirectory =		SDL2_FNAPlatform.GetBaseDirectory;
 			GetStorageRoot =		SDL2_FNAPlatform.GetStorageRoot;
 			ShowRuntimeError =		SDL2_FNAPlatform.ShowRuntimeError;
 			TextureDataFromStream =		SDL2_FNAPlatform.TextureDataFromStream;
 			SavePNG =			SDL2_FNAPlatform.SavePNG;
+			SaveJPG =			SDL2_FNAPlatform.SaveJPG;
 
 			// Don't overwrite application log hooks!
 			if (FNALoggerEXT.LogInfo == null)
@@ -154,6 +157,9 @@ namespace Microsoft.Xna.Framework
 		public delegate void StopTextInputFunc();
 		public static readonly StopTextInputFunc StopTextInput;
 
+		public delegate void SetTextInputRectangleFunc(Rectangle rectangle);
+		public static readonly SetTextInputRectangleFunc SetTextInputRectangle;
+
 		public delegate void GetMouseStateFunc(
 			IntPtr window,
 			out int x,
@@ -213,6 +219,9 @@ namespace Microsoft.Xna.Framework
 		public delegate int GetMaximumTouchCountFunc();
 		public static readonly GetMaximumTouchCountFunc GetMaximumTouchCount;
 
+		public delegate string GetBaseDirectoryFunc();
+		public static readonly GetBaseDirectoryFunc GetBaseDirectory;
+
 		public delegate string GetStorageRootFunc();
 		public static readonly GetStorageRootFunc GetStorageRoot;
 
@@ -239,6 +248,16 @@ namespace Microsoft.Xna.Framework
 			byte[] data
 		);
 		public static readonly SavePNGFunc SavePNG;
+
+		public delegate void SaveJPGFunc(
+			Stream stream,
+			int width,
+			int height,
+			int imgWidth,
+			int imgHeight,
+			byte[] data
+		);
+		public static readonly SaveJPGFunc SaveJPG;
 
 		#endregion
 	}

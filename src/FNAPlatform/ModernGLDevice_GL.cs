@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -485,7 +485,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		private delegate void CreateSamplers(
 			int n,
-			uint[] samplers
+			IntPtr samplers
 		);
 		private CreateSamplers glCreateSamplers;
 
@@ -637,7 +637,7 @@ namespace Microsoft.Xna.Framework.Graphics
 		private delegate void NamedFramebufferDrawBuffers(
 			uint framebuffer,
 			int n,
-			GLenum[] bufs
+			IntPtr bufs
 		);
 		private NamedFramebufferDrawBuffers glNamedFramebufferDrawBuffers;
 
@@ -806,7 +806,7 @@ namespace Microsoft.Xna.Framework.Graphics
 		/* BEGIN DEBUG OUTPUT FUNCTIONS */
 
 		private delegate void DebugMessageCallback(
-			DebugProc callback,
+			DebugProc debugCallback,
 			IntPtr userParam
 		);
 		private DebugMessageCallback glDebugMessageCallbackARB;
@@ -862,7 +862,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		/* BEGIN STRING MARKER FUNCTIONS */
 
-		private delegate void StringMarkerGREMEDY(int length, byte[] chars);
+		private delegate void StringMarkerGREMEDY(int length, IntPtr chars);
 		private StringMarkerGREMEDY glStringMarkerGREMEDY;
 
 		/* END STRING MARKER FUNCTIONS */

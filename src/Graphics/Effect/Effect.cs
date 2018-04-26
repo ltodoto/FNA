@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -58,9 +58,21 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		#region Private Variables
 
-		private Dictionary<string, EffectParameter> samplerMap = new Dictionary<string, EffectParameter>();
-		private MojoShader.MOJOSHADER_effectStateChanges stateChanges;
-		private GCHandle stateChangesHandle;
+		private Dictionary<IntPtr, EffectParameter> samplerMap = new Dictionary<IntPtr, EffectParameter>(new IntPtrBoxlessComparer());
+		private class IntPtrBoxlessComparer : IEqualityComparer<IntPtr>
+		{
+			public bool Equals(IntPtr x, IntPtr y)
+			{
+				return x == y;
+			}
+
+			public int GetHashCode(IntPtr obj)
+			{
+				return obj.GetHashCode();
+			}
+		}
+
+		private IntPtr stateChangesPtr;
 
 		#endregion
 
@@ -253,12 +265,18 @@ namespace Microsoft.Xna.Framework.Graphics
 			// The default technique is the first technique.
 			CurrentTechnique = Techniques[0];
 
-			// Pin the state changes so .NET doesn't move it around
-			stateChanges = new MojoShader.MOJOSHADER_effectStateChanges();
-			stateChanges.render_state_change_count = 0;
-			stateChanges.sampler_state_change_count = 0;
-			stateChanges.vertex_sampler_state_change_count = 0;
-			stateChangesHandle = GCHandle.Alloc(stateChanges, GCHandleType.Pinned);
+			// Use native memory for changes, .NET loves moving this around
+			unsafe
+			{
+				stateChangesPtr = Marshal.AllocHGlobal(
+					sizeof(MojoShader.MOJOSHADER_effectStateChanges)
+				);
+				MojoShader.MOJOSHADER_effectStateChanges *stateChanges =
+					(MojoShader.MOJOSHADER_effectStateChanges*) stateChangesPtr;
+				stateChanges->render_state_change_count = 0;
+				stateChanges->sampler_state_change_count = 0;
+				stateChanges->vertex_sampler_state_change_count = 0;
+			}
 		}
 
 		#endregion
@@ -286,12 +304,27 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 			}
 
-			// Pin the state changes so .NET doesn't move it around
-			stateChanges = new MojoShader.MOJOSHADER_effectStateChanges();
-			stateChanges.render_state_change_count = 0;
-			stateChanges.sampler_state_change_count = 0;
-			stateChanges.vertex_sampler_state_change_count = 0;
-			stateChangesHandle = GCHandle.Alloc(stateChanges, GCHandleType.Pinned);
+			// Use native memory for changes, .NET loves moving this around
+			unsafe
+			{
+				stateChangesPtr = Marshal.AllocHGlobal(
+					sizeof(MojoShader.MOJOSHADER_effectStateChanges)
+				);
+				MojoShader.MOJOSHADER_effectStateChanges *stateChanges =
+					(MojoShader.MOJOSHADER_effectStateChanges*) stateChangesPtr;
+				stateChanges->render_state_change_count = 0;
+				stateChanges->sampler_state_change_count = 0;
+				stateChanges->vertex_sampler_state_change_count = 0;
+			}
+		}
+
+		#endregion
+
+		#region Destructor
+
+		~Effect()
+		{
+			Dispose();
 		}
 
 		#endregion
@@ -315,9 +348,10 @@ namespace Microsoft.Xna.Framework.Graphics
 				{
 					GraphicsDevice.GLDevice.AddDisposeEffect(glEffect);
 				}
-				if (stateChangesHandle.IsAllocated)
+				if (stateChangesPtr != IntPtr.Zero)
 				{
-					stateChangesHandle.Free();
+					Marshal.FreeHGlobal(stateChangesPtr);
+					stateChangesPtr = IntPtr.Zero;
 				}
 			}
 			base.Dispose(disposing);
@@ -337,14 +371,16 @@ namespace Microsoft.Xna.Framework.Graphics
 				glEffect,
 				CurrentTechnique.TechniquePointer,
 				pass,
-				ref stateChanges
+				stateChangesPtr
 			);
+			MojoShader.MOJOSHADER_effectStateChanges *stateChanges =
+				(MojoShader.MOJOSHADER_effectStateChanges*) stateChangesPtr;
 			/* FIXME: Does this actually affect the XNA variables?
 			 * There's a chance that the D3DXEffect calls do this
 			 * behind XNA's back, even.
 			 * -flibit
 			 */
-			if (stateChanges.render_state_change_count > 0)
+			if (stateChanges->render_state_change_count > 0)
 			{
 				// Used to avoid redundant device state application
 				bool blendStateChanged = false;
@@ -407,8 +443,8 @@ namespace Microsoft.Xna.Framework.Graphics
 				bool scissorTestEnable = oldRasterizerState.ScissorTestEnable;
 				float slopeScaleDepthBias = oldRasterizerState.SlopeScaleDepthBias;
 
-				MojoShader.MOJOSHADER_effectState* states = (MojoShader.MOJOSHADER_effectState*) stateChanges.render_state_changes;
-				for (int i = 0; i < stateChanges.render_state_change_count; i += 1)
+				MojoShader.MOJOSHADER_effectState* states = (MojoShader.MOJOSHADER_effectState*) stateChanges->render_state_changes;
+				for (int i = 0; i < stateChanges->render_state_change_count; i += 1)
 				{
 					MojoShader.MOJOSHADER_renderStateType type = states[i].type;
 					if (	type == MojoShader.MOJOSHADER_renderStateType.MOJOSHADER_RS_VERTEXSHADER ||
@@ -757,20 +793,20 @@ namespace Microsoft.Xna.Framework.Graphics
 					GraphicsDevice.RasterizerState = newRasterizer;
 				}
 			}
-			if (stateChanges.sampler_state_change_count > 0)
+			if (stateChanges->sampler_state_change_count > 0)
 			{
 				INTERNAL_updateSamplers(
-					stateChanges.sampler_state_change_count,
-					(MojoShader.MOJOSHADER_samplerStateRegister*) stateChanges.sampler_state_changes,
+					stateChanges->sampler_state_change_count,
+					(MojoShader.MOJOSHADER_samplerStateRegister*) stateChanges->sampler_state_changes,
 					GraphicsDevice.Textures,
 					GraphicsDevice.SamplerStates
 				);
 			}
-			if (stateChanges.vertex_sampler_state_change_count > 0)
+			if (stateChanges->vertex_sampler_state_change_count > 0)
 			{
 				INTERNAL_updateSamplers(
-					stateChanges.vertex_sampler_state_change_count,
-					(MojoShader.MOJOSHADER_samplerStateRegister*) stateChanges.vertex_sampler_state_changes,
+					stateChanges->vertex_sampler_state_change_count,
+					(MojoShader.MOJOSHADER_samplerStateRegister*) stateChanges->vertex_sampler_state_changes,
 					GraphicsDevice.VertexTextures,
 					GraphicsDevice.VertexSamplerStates
 				);
@@ -824,12 +860,10 @@ namespace Microsoft.Xna.Framework.Graphics
 					MojoShader.MOJOSHADER_samplerStateType type = states[j].type;
 					if (type == MojoShader.MOJOSHADER_samplerStateType.MOJOSHADER_SAMP_TEXTURE)
 					{
-						string samplerName = Marshal.PtrToStringAnsi(
-							registers[i].sampler_name
-						);
-						if (samplerMap.ContainsKey(samplerName))
+						EffectParameter texParam;
+						if (samplerMap.TryGetValue(registers[i].sampler_name, out texParam))
 						{
-							Texture texture = samplerMap[samplerName].texture;
+							Texture texture = texParam.texture;
 							if (texture != null)
 							{
 								textures[register] = texture;
@@ -1059,7 +1093,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					{
 						if (textureName.Equals(parameters[j].Name))
 						{
-							samplerMap[Marshal.PtrToStringAnsi(param.value.name)] = parameters[j];
+							samplerMap[param.value.name] = parameters[j];
 							break;
 						}
 					}

@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -17,7 +17,6 @@ using System.Reflection;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Media;
-using Microsoft.Xna.Framework.Utilities;
 #endregion
 
 namespace Microsoft.Xna.Framework.Content
@@ -291,7 +290,7 @@ namespace Microsoft.Xna.Framework.Content
 			{
 				// Okay, so we couldn't open it. Maybe it needs a different extension?
 				// FIXME: This only works for files on the disk, what about custom streams? -flibit
-				modifiedAssetName = FileHelpers.NormalizeFilePathSeparators(
+				modifiedAssetName = MonoGame.Utilities.FileHelpers.NormalizeFilePathSeparators(
 					Path.Combine(RootDirectoryFullPath, assetName)
 				);
 				if (typeof(T) == typeof(Texture2D) || typeof(T) == typeof(Texture))

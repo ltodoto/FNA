@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -38,6 +38,16 @@ namespace Microsoft.Xna.Framework.Input
 		public static void StopTextInput()
 		{
 			FNAPlatform.StopTextInput();
+		}
+
+		/// <summary>
+		/// Sets the location within the game window where the text input is located.
+		/// This is used to set the location of the IME suggestions
+		/// </summary>
+		/// <param name="rectangle">Text input location relative to GameWindow.ClientBounds</param>
+		public static void SetInputRectangle(Rectangle rectangle)
+		{
+			FNAPlatform.SetTextInputRectangle(rectangle);
 		}
 
 		#endregion

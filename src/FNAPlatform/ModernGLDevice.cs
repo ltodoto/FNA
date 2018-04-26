@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -402,7 +402,7 @@ namespace Microsoft.Xna.Framework.Graphics
 		private readonly uint[] currentAttachments;
 		private readonly GLenum[] currentAttachmentTypes;
 		private int currentDrawBuffers;
-		private readonly GLenum[] drawBuffersArray;
+		private readonly IntPtr drawBuffersArray;
 		private uint currentRenderbuffer;
 		private DepthFormat currentDepthStencilFormat;
 		private readonly uint[] attachments;
@@ -509,7 +509,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		private bool effectApplied = false;
 
-		private static IntPtr glGetProcAddress(string name, IntPtr d)
+		private static IntPtr glGetProcAddress(IntPtr name, IntPtr d)
 		{
 			return SDL.SDL_GL_GetProcAddress(name);
 		}
@@ -670,7 +670,9 @@ namespace Microsoft.Xna.Framework.Graphics
 			SamplersMaxLevel = new int[numSamplers];
 			SamplersLODBias = new float[numSamplers];
 			SamplersMipped = new bool[numSamplers];
-			glCreateSamplers(numSamplers, Samplers);
+			GCHandle smpHandle = GCHandle.Alloc(Samplers, GCHandleType.Pinned);
+			glCreateSamplers(numSamplers, smpHandle.AddrOfPinnedObject());
+			smpHandle.Free();
 			for (int i = 0; i < numSamplers; i += 1)
 			{
 				Textures[i] = OpenGLTexture.NullTexture;
@@ -718,12 +720,16 @@ namespace Microsoft.Xna.Framework.Graphics
 			attachmentTypes = new GLenum[numAttachments];
 			currentAttachments = new uint[numAttachments];
 			currentAttachmentTypes = new GLenum[numAttachments];
-			drawBuffersArray = new GLenum[numAttachments];
-			for (int i = 0; i < numAttachments; i += 1)
+			drawBuffersArray = Marshal.AllocHGlobal(sizeof(GLenum) * numAttachments);
+			unsafe
 			{
-				currentAttachments[i] = 0;
-				currentAttachmentTypes[i] = GLenum.GL_TEXTURE_2D;
-				drawBuffersArray[i] = GLenum.GL_COLOR_ATTACHMENT0 + i;
+				GLenum* dba = (GLenum*) drawBuffersArray;
+				for (int i = 0; i < numAttachments; i += 1)
+				{
+					currentAttachments[i] = 0;
+					currentAttachmentTypes[i] = GLenum.GL_TEXTURE_2D;
+					dba[i] = GLenum.GL_COLOR_ATTACHMENT0 + i;
+				}
 			}
 			currentDrawBuffers = 0;
 			currentRenderbuffer = 0;
@@ -762,6 +768,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				(Backbuffer as OpenGLBackbuffer).Dispose();
 			}
 			Backbuffer = null;
+			Marshal.FreeHGlobal(drawBuffersArray);
 			MojoShader.MOJOSHADER_glMakeContextCurrent(IntPtr.Zero);
 			MojoShader.MOJOSHADER_glDestroyContext(shaderContext);
 
@@ -1059,8 +1066,9 @@ namespace Microsoft.Xna.Framework.Graphics
 		public void SetStringMarker(string text)
 		{
 #if DEBUG
-			byte[] chars = System.Text.Encoding.ASCII.GetBytes(text);
-			glStringMarkerGREMEDY(chars.Length, chars);
+			IntPtr chars = Marshal.StringToHGlobalAnsi(text);
+			glStringMarkerGREMEDY(text.Length, chars);
+			Marshal.FreeHGlobal(chars);
 #endif
 		}
 
@@ -1542,13 +1550,18 @@ namespace Microsoft.Xna.Framework.Graphics
 				slopeScaleDepthBias = rasterizerState.SlopeScaleDepthBias;
 			}
 
-			/* FIXME: This doesn't actually work on like 99% of setups!
-			 * For whatever reason people decided that they didn't have to obey
-			 * GL_MULTISAMPLE's value when it was disabled.
+			/* If you're reading this, you have a user with broken MSAA!
+			 * Here's the deal: On all modern drivers this should work,
+			 * but there was a period of time where, for some reason,
+			 * IHVs all took a nap and decided that they didn't have to
+			 * respect GL_MULTISAMPLE toggles. A couple sources:
 			 *
-			 * If they could do it for D3D9 I fail to see why they couldn't for
-			 * OpenGL. Idiots.
+			 * https://developer.apple.com/library/content/documentation/GraphicsImaging/Conceptual/OpenGL-MacProgGuide/opengl_fsaa/opengl_fsaa.html
 			 *
+			 * https://www.opengl.org/discussion_boards/showthread.php/172025-glDisable(GL_MULTISAMPLE)-has-no-effect
+			 *
+			 * So yeah. Have em update their driver. If they're on Intel,
+			 * tell them to install Linux. Yes, really.
 			 * -flibit
 			 */
 			if (rasterizerState.MultiSampleAntiAlias != multiSampleEnable)
@@ -1770,7 +1783,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			IGLEffect effect,
 			IntPtr technique,
 			uint pass,
-			ref MojoShader.MOJOSHADER_effectStateChanges stateChanges
+			IntPtr stateChanges
 		) {
 			effectApplied = true;
 			IntPtr glEffectData = (effect as OpenGLEffect).GLEffectData;
@@ -1797,7 +1810,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				glEffectData,
 				out whatever,
 				0,
-				ref stateChanges
+				stateChanges
 			);
 			MojoShader.MOJOSHADER_glEffectBeginPass(
 				glEffectData,
@@ -1808,17 +1821,15 @@ namespace Microsoft.Xna.Framework.Graphics
 			currentPass = pass;
 		}
 
-		public void BeginPassRestore(
-			IGLEffect effect,
-			ref MojoShader.MOJOSHADER_effectStateChanges changes
-		) {
+		public void BeginPassRestore(IGLEffect effect, IntPtr stateChanges)
+		{
 			IntPtr glEffectData = (effect as OpenGLEffect).GLEffectData;
 			uint whatever;
 			MojoShader.MOJOSHADER_glEffectBegin(
 				glEffectData,
 				out whatever,
 				1,
-				ref changes
+				stateChanges
 			);
 			MojoShader.MOJOSHADER_glEffectBeginPass(
 				glEffectData,
@@ -2120,9 +2131,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			IGLBuffer buffer,
 			int offsetInBytes,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes,
+			int dataLength,
 			SetDataOptions options
 		) {
 #if !DISABLE_THREADING
@@ -2143,8 +2152,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			glNamedBufferSubData(
 				handle,
 				(IntPtr) offsetInBytes,
-				(IntPtr) (elementSizeInBytes * elementCount),
-				data + (startIndex * elementSizeInBytes)
+				(IntPtr) dataLength,
+				data
 			);
 
 #if !DISABLE_THREADING
@@ -2156,9 +2165,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			IGLBuffer buffer,
 			int offsetInBytes,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes,
+			int dataLength,
 			SetDataOptions options
 		) {
 #if !DISABLE_THREADING
@@ -2180,8 +2187,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			glNamedBufferSubData(
 				handle,
 				(IntPtr) offsetInBytes,
-				(IntPtr) (elementSizeInBytes * elementCount),
-				data + (startIndex * elementSizeInBytes)
+				(IntPtr) dataLength,
+				data
 			);
 
 #if !DISABLE_THREADING

@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -377,11 +377,21 @@ namespace Microsoft.Xna.Framework.Storage
 			string[] drives = Environment.GetLogicalDrives();
 			for (int i = 0; i < drives.Length; i += 1)
 			{
-				if (	storageRoot.StartsWith(drives[i]) &&
-					drives[i].Length > length	)
+				if (string.IsNullOrEmpty(drives[i]))
+				{
+					// ... What?
+					continue;
+				}
+				string name = drives[i];
+				if (name[name.Length - 1] != Path.DirectorySeparatorChar)
+				{
+					name += Path.DirectorySeparatorChar;
+				}
+				if (	storageRoot.StartsWith(name) &&
+					name.Length > length	)
 				{
 					drive = i;
-					length = drives[i].Length;
+					length = name.Length;
 				}
 			}
 			if (drive >= 0)

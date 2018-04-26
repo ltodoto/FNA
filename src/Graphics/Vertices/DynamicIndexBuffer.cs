@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -9,6 +9,7 @@
 
 #region Using Statements
 using System;
+using System.Runtime.InteropServices;
 #endregion
 
 namespace Microsoft.Xna.Framework.Graphics
@@ -77,13 +78,17 @@ namespace Microsoft.Xna.Framework.Graphics
 			int elementCount,
 			SetDataOptions options
 		) where T : struct {
-			base.SetDataInternal<T>(
+			ErrorCheck(data, startIndex, elementCount);
+
+			GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+			GraphicsDevice.GLDevice.SetIndexBufferData(
+				buffer,
 				offsetInBytes,
-				data,
-				startIndex,
-				elementCount,
+				handle.AddrOfPinnedObject() + (startIndex * Marshal.SizeOf(typeof(T))),
+				elementCount * Marshal.SizeOf(typeof(T)),
 				options
 			);
+			handle.Free();
 		}
 
 		public void SetData<T>(
@@ -92,11 +97,34 @@ namespace Microsoft.Xna.Framework.Graphics
 			int elementCount,
 			SetDataOptions options
 		) where T : struct {
-			base.SetDataInternal<T>(
+			ErrorCheck(data, startIndex, elementCount);
+
+			GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
+			GraphicsDevice.GLDevice.SetIndexBufferData(
+				buffer,
 				0,
+				handle.AddrOfPinnedObject() + (startIndex * Marshal.SizeOf(typeof(T))),
+				elementCount * Marshal.SizeOf(typeof(T)),
+				options
+			);
+			handle.Free();
+		}
+
+		#endregion
+
+		#region Public Extensions
+
+		public void SetDataPointerEXT(
+			int offsetInBytes,
+			IntPtr data,
+			int dataLength,
+			SetDataOptions options
+		) {
+			GraphicsDevice.GLDevice.SetIndexBufferData(
+				buffer,
+				offsetInBytes,
 				data,
-				startIndex,
-				elementCount,
+				dataLength,
 				options
 			);
 		}

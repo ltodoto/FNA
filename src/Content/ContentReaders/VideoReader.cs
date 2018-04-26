@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -12,7 +12,6 @@ using System;
 using System.IO;
 
 using Microsoft.Xna.Framework.Media;
-using Microsoft.Xna.Framework.Utilities;
 #endregion
 
 namespace Microsoft.Xna.Framework.Content
@@ -40,7 +39,7 @@ namespace Microsoft.Xna.Framework.Content
 			ContentReader input,
 			Video existingInstance
 		) {
-			string path = FileHelpers.ResolveRelativePath(
+			string path = MonoGame.Utilities.FileHelpers.ResolveRelativePath(
 				Path.Combine(
 					input.ContentManager.RootDirectoryFullPath,
 					input.AssetName

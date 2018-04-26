@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -263,6 +263,15 @@ namespace Microsoft.Xna.Framework.Audio
 
 		public void Apply3D(AudioListener[] listeners, AudioEmitter emitter)
 		{
+			if (listeners == null)
+			{
+				throw new ArgumentNullException("listeners");
+			}
+			if (listeners.Length == 1)
+			{
+				Apply3D(listeners[0], emitter);
+				return;
+			}
 			throw new NotSupportedException("Only one listener is supported.");
 		}
 

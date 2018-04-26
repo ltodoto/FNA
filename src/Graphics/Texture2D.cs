@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -257,8 +257,17 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		public void SaveAsJpeg(Stream stream, int width, int height)
 		{
-			// dealwithit.png -flibit
-			throw new NotSupportedException("It's 2017. Time to move on.");
+			// Get the Texture2D pixels
+			byte[] data = new byte[Width * Height * GetFormatSize(Format)];
+			GetData(data);
+			FNAPlatform.SaveJPG(
+				stream,
+				width,
+				height,
+				Width,
+				Height,
+				data
+			);
 		}
 
 		public void SaveAsPng(Stream stream, int width, int height)
@@ -543,7 +552,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						i,
 						null,
 						((MemoryStream) stream).GetBuffer(),
-						(int) stream.Position,
+						(int) stream.Seek(0, SeekOrigin.Current),
 						levelSize
 					);
 					stream.Seek(

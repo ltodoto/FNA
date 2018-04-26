@@ -1,6 +1,6 @@
 #region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
- * Copyright 2009-2017 Ethan Lee and the MonoGame Team
+ * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
  * Released under the Microsoft Public License.
  * See LICENSE for details.
@@ -54,13 +54,8 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		internal static byte[] SwapDxt1(Stream imageStream, int imageLength, int width, int height)
 		{
-			using (MemoryStream imageDataStream = new MemoryStream(
-				new byte[imageLength],
-				0,
-				imageLength,
-				true,
-				true
-			))
+			byte[] imageData = new byte[imageLength];
+			using (MemoryStream imageDataStream = new MemoryStream(imageData))
 			using (BinaryWriter imageWriter = new BinaryWriter(imageDataStream))
 			using (BinaryReader imageReader = new BinaryReader(imageStream))
 			{
@@ -74,9 +69,8 @@ namespace Microsoft.Xna.Framework.Graphics
 						SwapDxt1Block(imageReader, imageWriter);
 					}
 				}
-
-				return imageDataStream.GetBuffer();
 			}
+			return imageData;
 		}
 
 		internal static byte[] SwapDxt3(byte[] imageData, int width, int height)
@@ -89,13 +83,8 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		internal static byte[] SwapDxt3(Stream imageStream, int imageLength, int width, int height)
 		{
-			using (MemoryStream imageDataStream = new MemoryStream(
-				new byte[imageLength],
-				0,
-				imageLength,
-				true,
-				true
-			))
+			byte[] imageData = new byte[imageLength];
+			using (MemoryStream imageDataStream = new MemoryStream(imageData))
 			using (BinaryWriter imageWriter = new BinaryWriter(imageDataStream))
 			using (BinaryReader imageReader = new BinaryReader(imageStream))
 			{
@@ -109,9 +98,8 @@ namespace Microsoft.Xna.Framework.Graphics
 						SwapDxt3Block(imageReader, imageWriter);
 					}
 				}
-
-				return imageDataStream.GetBuffer();
 			}
+			return imageData;
 		}
 
 		internal static byte[] SwapDxt5(byte[] imageData, int width, int height)
@@ -124,13 +112,8 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		internal static byte[] SwapDxt5(Stream imageStream, int imageLength, int width, int height)
 		{
-			using (MemoryStream imageDataStream = new MemoryStream(
-				new byte[imageLength],
-				0,
-				imageLength,
-				true,
-				true
-			))
+			byte[] imageData = new byte[imageLength];
+			using (MemoryStream imageDataStream = new MemoryStream(imageData))
 			using (BinaryWriter imageWriter = new BinaryWriter(imageDataStream))
 			using (BinaryReader imageReader = new BinaryReader(imageStream))
 			{
@@ -144,9 +127,8 @@ namespace Microsoft.Xna.Framework.Graphics
 						SwapDxt5Block(imageReader, imageWriter);
 					}
 				}
-
-				return imageDataStream.GetBuffer();
 			}
+			return imageData;
 		}
 
 		#endregion
