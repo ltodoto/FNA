@@ -732,7 +732,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					this,
 					presentationParameters.BackBufferWidth,
 					presentationParameters.BackBufferHeight,
-                    presentationParameters.BackBufferFormat,
+					presentationParameters.BackBufferFormat,
 					presentationParameters.DepthStencilFormat,
 					presentationParameters.MultiSampleCount
 				);
@@ -879,7 +879,7 @@ namespace Microsoft.Xna.Framework.Graphics
 						this,
 						presentationParameters.BackBufferWidth,
 						presentationParameters.BackBufferHeight,
-                        presentationParameters.BackBufferFormat,
+						presentationParameters.BackBufferFormat,
 						presentationParameters.DepthStencilFormat,
 						presentationParameters.MultiSampleCount
 					);

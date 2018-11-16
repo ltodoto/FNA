@@ -58,13 +58,13 @@ namespace Microsoft.Xna.Framework.Input.Touch
 		}
 
 		#endregion
-		
+
 		#region Internal Static Variables
-		
+
 		internal static bool TouchDeviceExists;
 
 		#endregion
-		
+
 		#region Private Static Variables
 
 		private static Queue<GestureSample> GestureList = new Queue<GestureSample>();
