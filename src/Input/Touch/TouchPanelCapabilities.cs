@@ -9,16 +9,11 @@
 
 namespace Microsoft.Xna.Framework.Input.Touch
 {
-	/// <summary>
-	/// Allows retrieval of capabilities information from touch panel device.
-	/// </summary>
+	// https://msdn.microsoft.com/en-us/library/microsoft.xna.framework.input.touch.touchpanelcapabilities.aspx
 	public struct TouchPanelCapabilities
 	{
 		#region Public Properties
 
-		/// <summary>
-		/// Returns true if a device is available for use.
-		/// </summary>
 		public bool IsConnected
 		{
 			get
@@ -27,9 +22,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		/// <summary>
-		/// Returns the maximum number of touch locations tracked by the touch panel device.
-		/// </summary>
 		public int MaximumTouchCount
 		{
 			get

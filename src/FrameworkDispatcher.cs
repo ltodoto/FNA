@@ -24,9 +24,6 @@ namespace Microsoft.Xna.Framework
 		internal static bool MediaStateChanged = false;
 		internal static List<DynamicSoundEffectInstance> Streams = new List<DynamicSoundEffectInstance>();
 
-		internal static GameTime GameTime;
-		internal static System.DateTime NullTime = new System.DateTime(0L);
-
 		#endregion
 
 		#region Public Methods

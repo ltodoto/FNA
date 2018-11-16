@@ -302,9 +302,6 @@ namespace Microsoft.Xna.Framework
 				SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_ALPHA_SIZE, 8);
 				break;
 			}
-			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_DEPTH_SIZE, 24);
-			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_STENCIL_SIZE, 8);
-
 			int depthSize = 24;
 			int stencilSize = 8;
 			DepthFormat windowDepthFormat;

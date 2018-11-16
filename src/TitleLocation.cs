@@ -24,6 +24,8 @@ namespace Microsoft.Xna.Framework
 				return FNAPlatform.TitleLocation;
 			}
 		}
+
 		#endregion
 	}
 }
+

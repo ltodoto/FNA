@@ -28,7 +28,7 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		public bool IsConnected 
+		public bool IsConnected
 		{
 			get
 			{
@@ -208,7 +208,7 @@ namespace Microsoft.Xna.Framework.Input.Touch
 		#region Enumerator
 
 		// https://msdn.microsoft.com/en-us/library/microsoft.xna.framework.input.touch.touchcollection.enumerator.aspx
-		public struct Enumerator : IEnumerator<TouchLocation>
+		public struct Enumerator : IEnumerator<TouchLocation>, IDisposable
 		{
 			private readonly TouchCollection collection;
 			private int position;
@@ -245,10 +245,10 @@ namespace Microsoft.Xna.Framework.Input.Touch
 				}
 			}
 
-            void IEnumerator.Reset()
-            {
-                position = -1;
-            }
+			void IEnumerator.Reset()
+			{
+				position = -1;
+			}
 		}
 
 		#endregion

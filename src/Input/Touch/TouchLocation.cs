@@ -14,6 +14,7 @@ using System.Diagnostics;
 
 namespace Microsoft.Xna.Framework.Input.Touch
 {
+	// https://msdn.microsoft.com/en-us/library/microsoft.xna.framework.input.touch.touchlocation.aspx
 	public struct TouchLocation : IEquatable<TouchLocation>
 	{
 		#region Public Properties
