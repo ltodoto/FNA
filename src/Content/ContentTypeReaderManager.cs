@@ -37,6 +37,8 @@ namespace Microsoft.Xna.Framework.Content
 
 		private static readonly Dictionary<Type, ContentTypeReader> contentReadersCache;
 
+		private static readonly string[] nestedMark = { "[[" };
+
 		// Trick to prevent the linker removing the code, but not actually execute the code
 		private static bool falseflag = false;
 
@@ -68,6 +70,22 @@ namespace Microsoft.Xna.Framework.Content
 			{
 				return reader;
 			}
+
+			/* If you got here, you're in a really nasty spot...
+			 * In extremely rare cases, a nested type will show up
+			 * and it will STILL depend on the Microsoft DLL names.
+			 * So, we get to prepare one more time. I bet this is
+			 * super annoying for anyone that wants the null case
+			 * rather than whatever the hell this mess is.
+			 * FIXME: Do we need FullName or can we trust ToString?
+			 * -flibit
+			 */
+			Type fixType = Type.GetType(PrepareType(targetType.FullName), false);
+			if (fixType != null && contentReaders.TryGetValue(fixType, out reader))
+			{
+				return reader;
+			}
+
 			return null;
 		}
 
@@ -282,7 +300,7 @@ namespace Microsoft.Xna.Framework.Content
 		{
 			// Needed to support nested types
 			int count = type.Split(
-				new[] {"[["},
+				nestedMark,
 				StringSplitOptions.None
 			).Length - 1;
 			string preparedType = type;

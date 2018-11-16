@@ -9,7 +9,6 @@
 
 #region Using Statements
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -95,11 +94,20 @@ namespace Microsoft.Xna.Framework.Media
 			currentDevice = null;
 
 			// Delete the Effect
-			shaderProgram.Dispose();
-			Marshal.FreeHGlobal(stateChangesPtr);
+			if (shaderProgram != null)
+			{
+				shaderProgram.Dispose();
+			}
+			if (stateChangesPtr != IntPtr.Zero)
+			{
+				Marshal.FreeHGlobal(stateChangesPtr);
+			}
 
 			// Delete the vertex buffer
-			vertBuffer.VertexBuffer.Dispose();
+			if (vertBuffer.VertexBuffer != null)
+			{
+				vertBuffer.VertexBuffer.Dispose();
+			}
 
 			// Delete the textures if they exist
 			for (int i = 0; i < 3; i += 1)
@@ -356,10 +364,10 @@ namespace Microsoft.Xna.Framework.Media
 
 		// Yes, we're seriously using these. -flibit
 
-		[DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
+		[DllImport("msvcrt", CallingConvention = CallingConvention.Cdecl)]
 		private static extern IntPtr malloc(IntPtr size);
 
-		[DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
+		[DllImport("msvcrt", CallingConvention = CallingConvention.Cdecl)]
 		private static extern void free(IntPtr memblock);
 
 		#endregion
@@ -418,6 +426,11 @@ namespace Microsoft.Xna.Framework.Media
 
 		public void Dispose()
 		{
+			if (IsDisposed)
+			{
+				return;
+			}
+
 			// Stop the VideoPlayer. This gets almost everything...
 			Stop();
 
@@ -432,7 +445,10 @@ namespace Microsoft.Xna.Framework.Media
 			}
 
 			// Dispose the Texture.
-			videoTexture[0].RenderTarget.Dispose();
+			if (videoTexture[0].RenderTarget != null)
+			{
+				videoTexture[0].RenderTarget.Dispose();
+			}
 
 			// Free the YUV buffer
 			if (yuvData != IntPtr.Zero)
@@ -471,7 +487,7 @@ namespace Microsoft.Xna.Framework.Media
 					Video.theora,
 					yuvData,
 					thisFrame - currentFrame
-				) == 1) {
+				) == 1 || currentFrame == -1) {
 					UpdateTexture();
 				}
 				currentFrame = thisFrame;
@@ -594,8 +610,6 @@ namespace Microsoft.Xna.Framework.Media
 					Video.Width,
 					Video.Height
 				);
-
-				UpdateTexture();
 			}
 
 			// The player can finally start now!
@@ -705,9 +719,6 @@ namespace Microsoft.Xna.Framework.Media
 
 		private void UpdateTexture()
 		{
-			// Set up an environment to muck about in.
-			GL_pushState();
-
 			// Prepare YUV GL textures with our current frame data
 			currentDevice.GLDevice.SetTextureData2DPointer(
 				yuvTextures[0],
@@ -730,13 +741,12 @@ namespace Microsoft.Xna.Framework.Media
 			);
 
 			// Draw the YUV textures to the framebuffer with our shader.
+			GL_pushState();
 			currentDevice.DrawPrimitives(
 				PrimitiveType.TriangleStrip,
 				0,
 				2
 			);
-
-			// Clean up after ourselves.
 			GL_popState();
 		}
 
@@ -770,10 +780,9 @@ namespace Microsoft.Xna.Framework.Media
 						break;
 					}
 				}
-				currentFrame = -1;
 			}
 
-			currentFrame = 0;
+			currentFrame = -1;
 		}
 
 		#endregion

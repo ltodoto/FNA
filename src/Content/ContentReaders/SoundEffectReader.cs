@@ -38,29 +38,22 @@ namespace Microsoft.Xna.Framework.Content
 			ContentReader input,
 			SoundEffect existingInstance
 		) {
+			/* Swap endian - this is one of the very few places requiring this!
+			 * Note: This only affects the fmt chunk that's glued into the file.
+			 */
+			bool se = input.platform == 'x';
+
 			// Format block length
 			uint formatLength = input.ReadUInt32();
 
-			// Wavedata format
-			ushort format = input.ReadUInt16();
-
-			// Number of channels
-			ushort channels = input.ReadUInt16();
-
-			// Sample rate
-			uint sampleRate = input.ReadUInt32();
-
-			// Averate bytes per second, unused
-			input.ReadUInt32();
-
-			// Block alignment, needed for MSADPCM
-			ushort blockAlign = input.ReadUInt16();
-
-			// Bit depth
-			ushort bitDepth = input.ReadUInt16();
-
-			// cbSize, unused
-			input.ReadUInt16();
+			// WaveFormatEx data
+			ushort wFormatTag = Swap(se, input.ReadUInt16());
+			ushort nChannels = Swap(se, input.ReadUInt16());
+			uint nSamplesPerSec = Swap(se, input.ReadUInt32());
+			uint nAvgBytesPerSec = Swap(se, input.ReadUInt32());
+			ushort nBlockAlign = Swap(se, input.ReadUInt16());
+			ushort wBitsPerSample = Swap(se, input.ReadUInt16());
+			/* ushort cbSize =*/ input.ReadUInt16();
 
 			// Seek past the rest of this crap (cannot seek though!)
 			input.ReadBytes((int) (formatLength - 18));
@@ -69,8 +62,8 @@ namespace Microsoft.Xna.Framework.Content
 			byte[] data = input.ReadBytes(input.ReadInt32());
 
 			// Loop information
-			uint loopStart = input.ReadUInt32();
-			uint loopLength = input.ReadUInt32();
+			int loopStart = input.ReadInt32();
+			int loopLength = input.ReadInt32();
 
 			// Sound duration in milliseconds, unused
 			input.ReadUInt32();
@@ -78,15 +71,42 @@ namespace Microsoft.Xna.Framework.Content
 			return new SoundEffect(
 				input.AssetName,
 				data,
-				sampleRate,
-				channels,
+				0,
+				data.Length,
+				wFormatTag,
+				nChannels,
+				nSamplesPerSec,
+				nAvgBytesPerSec,
+				nBlockAlign,
+				wBitsPerSample,
 				loopStart,
-				loopLength,
-				format == 2,
-				(uint) ((format == 2) ? (((blockAlign / channels) - 6) * 2) : (bitDepth / 16))
+				loopLength
 			);
 		}
 
 		#endregion
+
+		#region Internal Static Swapping Methods
+
+		internal static ushort Swap(bool swap, ushort x)
+		{
+			return !swap ? x : (ushort) (
+				((x >> 8)	& 0x00FF) |
+				((x << 8)	& 0xFF00)
+			);
+		}
+
+		internal static uint Swap(bool swap, uint x)
+		{
+			return !swap ? x : (
+				((x >> 24)	& 0x000000FF) |
+				((x >> 8)	& 0x0000FF00) |
+				((x << 8)	& 0x00FF0000) |
+				((x << 24)	& 0xFF000000)
+			);
+		}
+
+		#endregion
+
 	}
 }

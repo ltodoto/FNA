@@ -8,9 +8,10 @@
 #endregion
 
 #region Using Statements
+using System.Collections.Generic;
 using Microsoft.Xna.Framework.Audio;
-using Microsoft.Xna.Framework.Media;
 using Microsoft.Xna.Framework.Input.Touch;
+using MediaPlayer = Microsoft.Xna.Framework.Media.MediaPlayer;
 #endregion
 
 namespace Microsoft.Xna.Framework
@@ -21,12 +22,7 @@ namespace Microsoft.Xna.Framework
 
 		internal static bool ActiveSongChanged = false;
 		internal static bool MediaStateChanged = false;
-
-		#endregion
-
-		#region Private Variables
-
-		private static bool FirstFrame = true;
+		internal static List<DynamicSoundEffectInstance> Streams = new List<DynamicSoundEffectInstance>();
 
 		internal static GameTime GameTime;
 		internal static System.DateTime NullTime = new System.DateTime(0L);
@@ -40,21 +36,24 @@ namespace Microsoft.Xna.Framework
 			/* Updates the status of various framework components
 			 * (such as power state and media), and raises related events.
 			 */
-			if (FirstFrame)
+			for (int i = 0; i < Streams.Count; i += 1)
 			{
-				FirstFrame = false;
-				AudioDevice.Initialize();
+				DynamicSoundEffectInstance dsfi = Streams[i];
+				dsfi.Update();
+				if (dsfi.IsDisposed)
+				{
+					i -= 1;
+				}
 			}
-			else if (AudioDevice.ALDevice != null)
+			if (Microphone.micList != null)
 			{
-				/* This has to be in an 'else', otherwise we hit
-				 * NoAudioHardwareException in the wrong place.
-				 * -flibit
-				 */
+				for (int i = 0; i < Microphone.micList.Count; i += 1)
+				{
+					Microphone.micList[i].CheckBuffer();
+				}
+			}
 
-				// Checks and cleans instances, fires events accordingly
-				AudioDevice.Update();
-			}
+			MediaPlayer.Update();
 			if (ActiveSongChanged)
 			{
 				MediaPlayer.OnActiveSongChanged();
@@ -66,15 +65,9 @@ namespace Microsoft.Xna.Framework
 				MediaStateChanged = false;
 			}
 
-			// The TouchPanel needs to know the time for when touches arrive.
-			if (GameTime != null)
+			if (TouchPanel.TouchDeviceExists)
 			{
-				TouchPanel.INTERNAL_CurrentTimestamp = GameTime.TotalGameTime;
-			}
-			else
-			{
-				// Someone's using XNA / FNA without Game...
-				TouchPanel.INTERNAL_CurrentTimestamp = System.DateTime.Now - NullTime;
+				TouchPanel.Update();
 			}
 		}
 

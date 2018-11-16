@@ -1,4 +1,4 @@
-#region License
+﻿#region License
 /* FNA - XNA4 Reimplementation for Desktop Platforms
  * Copyright 2009-2018 Ethan Lee and the MonoGame Team
  *
@@ -11,19 +11,15 @@
 using System;
 #endregion
 
-namespace Microsoft.Xna.Framework
+// This is a dummy namespace needed for Xamarin iOS/tvOS AOT compilation
+namespace ObjCRuntime
 {
-	internal static class TitleLocation
+	[AttributeUsage(AttributeTargets.Method)]
+	class MonoPInvokeCallbackAttribute : Attribute
 	{
-		#region Public Static Properties
-
-		public static string Path
+		public MonoPInvokeCallbackAttribute(Type t)
 		{
-			get
-			{
-				return FNAPlatform.TitleLocation;
-			}
+
 		}
-		#endregion
 	}
 }

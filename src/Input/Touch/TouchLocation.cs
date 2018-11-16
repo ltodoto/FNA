@@ -90,29 +90,18 @@ namespace Microsoft.Xna.Framework.Input.Touch
 
 		#region Internal Static TouchLocation
 
-		/// <summary>
-		/// Helper for assigning an invalid touch location.
-		/// </summary>
 		internal static readonly TouchLocation Invalid = new TouchLocation();
 
 		#endregion
 
 		#region Internal Variables
 
-		/// <summary>
-		/// True if this touch was pressed and released on the same frame.
-		/// In this case we will keep it around for the user to get by GetState that frame.
-		/// However if they do not call GetState that frame, this touch will be forgotten.
-		/// </summary>
 		internal bool SameFrameReleased;
 
 		#endregion
 
 		#region Private Variables
 
-		/// <summary>
-		/// Attributes
-		/// </summary>
 		private int id;
 		private Vector2 position;
 		private Vector2 previousPosition;
@@ -390,10 +379,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 
 		#region Internal Methods
 
-		/// <summary>
-		/// Returns a copy of the touch with the state changed to moved.
-		/// </summary>
-		/// <returns>The new touch location.</returns>
 		internal TouchLocation AsMovedState()
 		{
 			TouchLocation touch = this;
@@ -409,10 +394,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			return touch;
 		}
 
-		/// <summary>
-		/// Updates the touch location using the new event.
-		/// </summary>
-		/// <param name="touchEvent">The next event for this touch location.</param>
 		internal bool UpdateState(TouchLocation touchEvent)
 		{
 			Debug.Assert(

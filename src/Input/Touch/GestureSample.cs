@@ -13,17 +13,11 @@ using System;
 
 namespace Microsoft.Xna.Framework.Input.Touch
 {
-	/// <summary>
-	/// Represents data from a multi-touch gesture over a span of time.
-	/// </summary>
 	public struct GestureSample
 	{
 
 		#region Public Properties
 
-		/// <summary>
-		/// Gets the type of the gesture.
-		/// </summary>
 		public GestureType GestureType
 		{
 			get
@@ -32,9 +26,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		/// <summary>
-		/// Gets the starting time for this multi-touch gesture sample.
-		/// </summary>
 		public TimeSpan Timestamp
 		{
 			get
@@ -43,9 +34,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		/// <summary>
-		/// Gets the position of the first touch-point in the gesture sample.
-		/// </summary>
 		public Vector2 Position
 		{
 			get
@@ -54,9 +42,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		/// <summary>
-		/// Gets the position of the second touch-point in the gesture sample.
-		/// </summary>
 		public Vector2 Position2
 		{
 			get
@@ -65,9 +50,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		/// <summary>
-		/// Gets the delta information for the first touch-point in the gesture sample.
-		/// </summary>
 		public Vector2 Delta
 		{
 			get
@@ -76,9 +58,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 			}
 		}
 
-		/// <summary>
-		/// Gets the delta information for the second touch-point in the gesture sample.
-		/// </summary>
 		public Vector2 Delta2
 		{
 			get
@@ -102,15 +81,6 @@ namespace Microsoft.Xna.Framework.Input.Touch
 
 		#region Public Constructor
 
-		/// <summary>
-		/// Initializes a new <see cref="GestureSample"/>.
-		/// </summary>
-		/// <param name="gestureType"><see cref="GestureType"/></param>
-		/// <param name="timestamp"></param>
-		/// <param name="position"></param>
-		/// <param name="position2"></param>
-		/// <param name="delta"></param>
-		/// <param name="delta2"></param>
 		public GestureSample(
 			GestureType gestureType,
 			TimeSpan timestamp,

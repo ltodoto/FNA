@@ -5,13 +5,11 @@
 SRC = \
 	src/Audio/AudioCategory.cs \
 	src/Audio/AudioChannels.cs \
-	src/Audio/AudioDevice.cs \
 	src/Audio/AudioEmitter.cs \
 	src/Audio/AudioEngine.cs \
 	src/Audio/AudioListener.cs \
 	src/Audio/AudioStopOptions.cs \
 	src/Audio/Cue.cs \
-	src/Audio/CueData.cs \
 	src/Audio/DynamicSoundEffectInstance.cs \
 	src/Audio/InstancePlayLimitException.cs \
 	src/Audio/Microphone.cs \
@@ -24,7 +22,6 @@ SRC = \
 	src/Audio/SoundEffectInstance.cs \
 	src/Audio/SoundState.cs \
 	src/Audio/WaveBank.cs \
-	src/Audio/XACTInternal.cs \
 	src/BoundingBox.cs \
 	src/BoundingFrustum.cs \
 	src/BoundingSphere.cs \
@@ -123,12 +120,9 @@ SRC = \
 	src/FNALoggerEXT.cs \
 	src/FNAPlatform/FNAPlatform.cs \
 	src/FNAPlatform/FNAWindow.cs \
-	src/FNAPlatform/IALDevice.cs \
 	src/FNAPlatform/IGLDevice.cs \
 	src/FNAPlatform/ModernGLDevice.cs \
 	src/FNAPlatform/ModernGLDevice_GL.cs \
-	src/FNAPlatform/NullALDevice.cs \
-	src/FNAPlatform/OpenALDevice.cs \
 	src/FNAPlatform/OpenGLDevice.cs \
 	src/FNAPlatform/OpenGLDevice_GL.cs \
 	src/FNAPlatform/SDL2_FNAPlatform.cs \
@@ -284,6 +278,7 @@ SRC = \
 	src/Input/Mouse.cs \
 	src/Input/MouseState.cs \
 	src/Input/TextInputEXT.cs \
+	src/Input/Touch/GestureDetector.cs \
 	src/Input/Touch/GestureSample.cs \
 	src/Input/Touch/GestureType.cs \
 	src/Input/Touch/TouchCollection.cs \
@@ -298,10 +293,10 @@ SRC = \
 	src/Media/MediaPlayer.cs \
 	src/Media/MediaQueue.cs \
 	src/Media/MediaState.cs \
+	src/Media/Song.cs \
 	src/Media/SongCollection.cs \
 	src/Media/VideoSoundtrackType.cs \
 	src/Media/VisualizationData.cs \
-	src/Media/Xiph/Song.cs \
 	src/Media/Xiph/Video.cs \
 	src/Media/Xiph/VideoPlayer.cs \
 	src/NamespaceDocs.cs \
@@ -321,19 +316,15 @@ SRC = \
 	src/TitleLocation.cs \
 	src/Utilities/AssemblyHelper.cs \
 	src/Utilities/FileHelpers.cs \
+	src/Utilities/FNAInternalExtensions.cs \
+	src/Utilities/XamarinHelper.cs \
 	src/Vector2.cs \
 	src/Vector3.cs \
 	src/Vector4.cs \
 	lib/SDL2-CS/src/SDL2.cs \
 	lib/SDL2-CS/src/SDL2_image.cs \
-	lib/OpenAL-CS/src/ALC10.cs \
-	lib/OpenAL-CS/src/ALC11.cs \
-	lib/OpenAL-CS/src/AL10.cs \
-	lib/OpenAL-CS/src/AL11.cs \
-	lib/OpenAL-CS/src/ALEXT.cs \
-	lib/OpenAL-CS/src/EFX.cs \
-	lib/MojoShader-CS/MojoShader.cs \
-	lib/Vorbisfile-CS/Vorbisfile.cs \
+	lib/FAudio/csharp/FAudio.cs \
+	lib/MojoShader/csharp/MojoShader.cs \
 	lib/Theorafile/csharp/Theorafile.cs
 
 RESDIR = src/Graphics/Effect/StockEffects/FXB
@@ -352,7 +343,7 @@ RES = \
 debug: clean-debug
 	mkdir -p bin/Debug
 	cp FNA.dll.config bin/Debug
-	dmcs /unsafe -debug -define:DEBUG -out:bin/Debug/FNA.dll -target:library $(SRC) $(RES)
+	mcs /unsafe -debug -define:DEBUG -out:bin/Debug/FNA.dll -target:library $(SRC) $(RES)
 
 clean-debug:
 	rm -rf bin/Debug
@@ -360,7 +351,7 @@ clean-debug:
 release: clean-release
 	mkdir -p bin/Release
 	cp FNA.dll.config bin/Release
-	dmcs /unsafe -optimize -out:bin/Release/FNA.dll -target:library $(SRC) $(RES)
+	mcs /unsafe -optimize -out:bin/Release/FNA.dll -target:library $(SRC) $(RES)
 
 clean-release:
 	rm -rf bin/Release

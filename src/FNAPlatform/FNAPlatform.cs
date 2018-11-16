@@ -14,6 +14,7 @@ using System.IO;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Audio;
 using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Input.Touch;
 #endregion
 
 namespace Microsoft.Xna.Framework
@@ -47,9 +48,9 @@ namespace Microsoft.Xna.Framework
 			SetWindowTitle =		SDL2_FNAPlatform.SetWindowTitle;
 			RunLoop =			SDL2_FNAPlatform.RunLoop;
 			CreateGLDevice =		SDL2_FNAPlatform.CreateGLDevice;
-			CreateALDevice =		SDL2_FNAPlatform.CreateALDevice;
 			SetPresentationInterval =	SDL2_FNAPlatform.SetPresentationInterval;
 			GetGraphicsAdapters =		SDL2_FNAPlatform.GetGraphicsAdapters;
+			GetCurrentDisplayMode =		SDL2_FNAPlatform.GetCurrentDisplayMode;
 			GetKeyFromScancode =		SDL2_FNAPlatform.GetKeyFromScancode;
 			StartTextInput =		SDL2.SDL.SDL_StartTextInput;
 			StopTextInput =			SDL2.SDL.SDL_StopTextInput;
@@ -69,10 +70,18 @@ namespace Microsoft.Xna.Framework
 			GetMaximumTouchCount =		SDL2_FNAPlatform.GetMaximumTouchCount;
 			GetBaseDirectory =		SDL2_FNAPlatform.GetBaseDirectory;
 			GetStorageRoot =		SDL2_FNAPlatform.GetStorageRoot;
+			GetDriveInfo =			SDL2_FNAPlatform.GetDriveInfo;
 			ShowRuntimeError =		SDL2_FNAPlatform.ShowRuntimeError;
 			TextureDataFromStream =		SDL2_FNAPlatform.TextureDataFromStream;
 			SavePNG =			SDL2_FNAPlatform.SavePNG;
 			SaveJPG =			SDL2_FNAPlatform.SaveJPG;
+			GetMicrophones =		SDL2_FNAPlatform.GetMicrophones;
+			GetMicrophoneSamples =		SDL2_FNAPlatform.GetMicrophoneSamples;
+			GetMicrophoneQueuedBytes =	SDL2_FNAPlatform.GetMicrophoneQueuedBytes;
+			StartMicrophone =		SDL2_FNAPlatform.StartMicrophone;
+			StopMicrophone =		SDL2_FNAPlatform.StopMicrophone;
+			GetTouchCapabilities =		SDL2_FNAPlatform.GetTouchCapabilities;
+			GetNumTouchFingers =		SDL2_FNAPlatform.GetNumTouchFingers;
 
 			// Don't overwrite application log hooks!
 			if (FNALoggerEXT.LogInfo == null)
@@ -89,8 +98,14 @@ namespace Microsoft.Xna.Framework
 			}
 
 			AppDomain.CurrentDomain.ProcessExit += SDL2_FNAPlatform.ProgramExit;
-			SDL2_FNAPlatform.ProgramInit();
+			TitleLocation = SDL2_FNAPlatform.ProgramInit();
 		}
+
+		#endregion
+
+		#region Public Static Variables
+
+		public static readonly string TitleLocation;
 
 		#endregion
 
@@ -139,14 +154,14 @@ namespace Microsoft.Xna.Framework
 		);
 		public static readonly CreateGLDeviceFunc CreateGLDevice;
 
-		public delegate IALDevice CreateALDeviceFunc();
-		public static readonly CreateALDeviceFunc CreateALDevice;
-
 		public delegate void SetPresentationIntervalFunc(PresentInterval interval);
 		public static readonly SetPresentationIntervalFunc SetPresentationInterval;
 
 		public delegate GraphicsAdapter[] GetGraphicsAdaptersFunc();
 		public static readonly GetGraphicsAdaptersFunc GetGraphicsAdapters;
+
+		public delegate DisplayMode GetCurrentDisplayModeFunc(int adapterIndex);
+		public static readonly GetCurrentDisplayModeFunc GetCurrentDisplayMode;
 
 		public delegate Keys GetKeyFromScancodeFunc(Keys scancode);
 		public static readonly GetKeyFromScancodeFunc GetKeyFromScancode;
@@ -225,6 +240,9 @@ namespace Microsoft.Xna.Framework
 		public delegate string GetStorageRootFunc();
 		public static readonly GetStorageRootFunc GetStorageRoot;
 
+		public delegate DriveInfo GetDriveInfoFunc(string storageRoot);
+		public static readonly GetDriveInfoFunc GetDriveInfo;
+
 		public delegate void ShowRuntimeErrorFunc(string title, string message);
 		public static readonly ShowRuntimeErrorFunc ShowRuntimeError;
 
@@ -258,6 +276,32 @@ namespace Microsoft.Xna.Framework
 			byte[] data
 		);
 		public static readonly SaveJPGFunc SaveJPG;
+
+		public delegate Microphone[] GetMicrophonesFunc();
+		public static readonly GetMicrophonesFunc GetMicrophones;
+
+		public delegate int GetMicrophoneSamplesFunc(
+			uint handle,
+			byte[] buffer,
+			int offset,
+			int count
+		);
+		public static readonly GetMicrophoneSamplesFunc GetMicrophoneSamples;
+
+		public delegate int GetMicrophoneQueuedBytesFunc(uint handle);
+		public static readonly GetMicrophoneQueuedBytesFunc GetMicrophoneQueuedBytes;
+
+		public delegate void StartMicrophoneFunc(uint handle);
+		public static readonly StartMicrophoneFunc StartMicrophone;
+
+		public delegate void StopMicrophoneFunc(uint handle);
+		public static readonly StopMicrophoneFunc StopMicrophone;
+
+		public delegate TouchPanelCapabilities GetTouchCapabilitiesFunc();
+		public static readonly GetTouchCapabilitiesFunc GetTouchCapabilities;
+
+		public delegate int GetNumTouchFingersFunc();
+		public static readonly GetNumTouchFingersFunc GetNumTouchFingers;
 
 		#endregion
 	}

@@ -441,6 +441,9 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		private GLenum backbufferScaleMode;
 
+		private uint realBackbufferFBO;
+		private uint realBackbufferRBO;
+
 		#endregion
 
 		#region OpenGL Device Capabilities
@@ -520,6 +523,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		private bool effectApplied = false;
 
+		[ObjCRuntime.MonoPInvokeCallback(typeof(MojoShader.MOJOSHADER_glGetProcAddress))]
 		private static IntPtr glGetProcAddress(IntPtr name, IntPtr d)
 		{
 			return SDL.SDL_GL_GetProcAddress(name);
@@ -543,6 +547,7 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		private byte versionES;
 		private bool useCoreProfile;
+		private DepthFormat windowDepthFormat;
 		private uint vao;
 
 		#endregion
@@ -550,7 +555,7 @@ namespace Microsoft.Xna.Framework.Graphics
 		#region memcpy Export
 
 		/* This is used a lot for GetData/Read calls... -flibit */
-		[DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
+		[DllImport("msvcrt", CallingConvention = CallingConvention.Cdecl)]
 		private static extern void memcpy(IntPtr dst, IntPtr src, IntPtr len);
 
 		#endregion
@@ -584,6 +589,49 @@ namespace Microsoft.Xna.Framework.Graphics
 			// Check for a possible Core context
 			int coreFlag = (int) SDL.SDL_GLprofile.SDL_GL_CONTEXT_PROFILE_CORE;
 			useCoreProfile = (flags & coreFlag) == coreFlag;
+
+			// Check the window's depth/stencil format
+			int depthSize, stencilSize;
+			SDL.SDL_GL_GetAttribute(SDL.SDL_GLattr.SDL_GL_DEPTH_SIZE, out depthSize);
+			SDL.SDL_GL_GetAttribute(SDL.SDL_GLattr.SDL_GL_STENCIL_SIZE, out stencilSize);
+			if (depthSize == 0 && stencilSize == 0)
+			{
+				windowDepthFormat = DepthFormat.None;
+			}
+			else if (depthSize == 16 && stencilSize == 0)
+			{
+				windowDepthFormat = DepthFormat.Depth16;
+			}
+			else if (depthSize == 24 && stencilSize == 0)
+			{
+				windowDepthFormat = DepthFormat.Depth24;
+			}
+			else if (depthSize == 24 && stencilSize == 8)
+			{
+				windowDepthFormat = DepthFormat.Depth24Stencil8;
+			}
+			else
+			{
+				throw new NotSupportedException("Unrecognized window depth/stencil format!");
+			}
+
+			// UIKit needs special treatment for backbuffer behavior
+			SDL.SDL_SysWMinfo wmInfo = new SDL.SDL_SysWMinfo();
+			SDL.SDL_VERSION(out wmInfo.version);
+			SDL.SDL_GetWindowWMInfo(
+				presentationParameters.DeviceWindowHandle,
+				ref wmInfo
+			);
+			if (wmInfo.subsystem == SDL.SDL_SYSWM_TYPE.SDL_SYSWM_UIKIT)
+			{
+				realBackbufferFBO = wmInfo.info.uikit.framebuffer;
+				realBackbufferRBO = wmInfo.info.uikit.colorbuffer;
+			}
+			else
+			{
+				realBackbufferFBO = 0;
+				realBackbufferRBO = 0;
+			}
 
 			// Init threaded GL crap where applicable
 			InitThreadedGL(
@@ -693,7 +741,8 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				Backbuffer = new NullBackbuffer(
 					presentationParameters.BackBufferWidth,
-					presentationParameters.BackBufferHeight
+					presentationParameters.BackBufferHeight,
+					windowDepthFormat
 				);
 			}
 
@@ -850,7 +899,8 @@ namespace Microsoft.Xna.Framework.Graphics
 					(Backbuffer as OpenGLBackbuffer).Dispose();
 					Backbuffer = new NullBackbuffer(
 						presentationParameters.BackBufferWidth,
-						presentationParameters.BackBufferHeight
+						presentationParameters.BackBufferHeight,
+						windowDepthFormat
 					);
 				}
 				else
@@ -968,7 +1018,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				{
 					BindReadFramebuffer((Backbuffer as OpenGLBackbuffer).Handle);
 				}
-				BindDrawFramebuffer(0);
+				BindDrawFramebuffer(realBackbufferFBO);
 
 				glBlitFramebuffer(
 					srcX, srcY, srcW, srcH,
@@ -977,7 +1027,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					backbufferScaleMode
 				);
 
-				BindFramebuffer(0);
+				BindFramebuffer(realBackbufferFBO);
 
 				if (scissorTestEnable)
 				{
@@ -1367,7 +1417,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (blendState.ColorWriteChannels1 != colorWriteEnable1)
 			{
 				colorWriteEnable1 = blendState.ColorWriteChannels1;
-				glColorMaskIndexed(
+				glColorMaski(
 					1,
 					(colorWriteEnable1 & ColorWriteChannels.Red) != 0,
 					(colorWriteEnable1 & ColorWriteChannels.Green) != 0,
@@ -1378,7 +1428,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (blendState.ColorWriteChannels2 != colorWriteEnable2)
 			{
 				colorWriteEnable2 = blendState.ColorWriteChannels2;
-				glColorMaskIndexed(
+				glColorMaski(
 					2,
 					(colorWriteEnable2 & ColorWriteChannels.Red) != 0,
 					(colorWriteEnable2 & ColorWriteChannels.Green) != 0,
@@ -1389,7 +1439,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			if (blendState.ColorWriteChannels3 != colorWriteEnable3)
 			{
 				colorWriteEnable3 = blendState.ColorWriteChannels3;
-				glColorMaskIndexed(
+				glColorMaski(
 					3,
 					(colorWriteEnable3 & ColorWriteChannels.Red) != 0,
 					(colorWriteEnable3 & ColorWriteChannels.Green) != 0,
@@ -2681,9 +2731,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			int h,
 			int level,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes
+			int dataLength
 		) {
 #if !DISABLE_THREADING
 			ForceToMainThread(() => {
@@ -2711,8 +2759,8 @@ namespace Microsoft.Xna.Framework.Graphics
 					w,
 					h,
 					glInternalFormat,
-					elementCount * elementSizeInBytes,
-					data + (startIndex * elementSizeInBytes)
+					dataLength,
+					data
 				);
 			}
 			else
@@ -2736,7 +2784,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					h,
 					glFormat,
 					glType,
-					data + (startIndex * elementSizeInBytes)
+					data
 				);
 
 				// Keep this state sane -flibit
@@ -2765,9 +2813,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			int front,
 			int back,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes
+			int dataLength
 		) {
 #if !DISABLE_THREADING
 			ForceToMainThread(() => {
@@ -2787,7 +2833,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				back - front,
 				glFormat,
 				glType,
-				data + (startIndex * elementSizeInBytes)
+				data
 			);
 
 #if !DISABLE_THREADING
@@ -2805,9 +2851,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			CubeMapFace cubeMapFace,
 			int level,
 			IntPtr data,
-			int startIndex,
-			int elementCount,
-			int elementSizeInBytes
+			int dataLength
 		) {
 #if !DISABLE_THREADING
 			ForceToMainThread(() => {
@@ -2835,8 +2879,8 @@ namespace Microsoft.Xna.Framework.Graphics
 					width,
 					height,
 					glInternalFormat,
-					elementCount * elementSizeInBytes,
-					data + (startIndex * elementSizeInBytes)
+					dataLength,
+					data
 				);
 			}
 			else
@@ -2850,7 +2894,7 @@ namespace Microsoft.Xna.Framework.Graphics
 					height,
 					glFormat,
 					glType,
-					data + (startIndex * elementSizeInBytes)
+					data
 				);
 			}
 
@@ -3502,7 +3546,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 			glBindRenderbuffer(
 				GLenum.GL_RENDERBUFFER,
-				0
+				realBackbufferRBO
 			);
 
 #if !DISABLE_THREADING
@@ -3551,7 +3595,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			}
 			glBindRenderbuffer(
 				GLenum.GL_RENDERBUFFER,
-				0
+				realBackbufferRBO
 			);
 
 #if !DISABLE_THREADING
@@ -3713,7 +3757,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				BindFramebuffer(
 					(Backbuffer is OpenGLBackbuffer) ?
 						(Backbuffer as OpenGLBackbuffer).Handle :
-						0
+						realBackbufferFBO
 				);
 				flipViewport = 1;
 				return;
@@ -3996,7 +4040,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				GLenum.GL_RGB10_A2_EXT,				// SurfaceFormat.Rgba1010102
 				GLenum.GL_RG16,					// SurfaceFormat.Rg32
 				GLenum.GL_RGBA16,				// SurfaceFormat.Rgba64
-				GLenum.GL_LUMINANCE8,				// SurfaceFormat.Alpha8
+				GLenum.GL_LUMINANCE,				// SurfaceFormat.Alpha8
 				GLenum.GL_R32F,					// SurfaceFormat.Single
 				GLenum.GL_RG32F,				// SurfaceFormat.Vector2
 				GLenum.GL_RGBA32F,				// SurfaceFormat.Vector4
@@ -4384,7 +4428,10 @@ namespace Microsoft.Xna.Framework.Graphics
 					depthStencilAttachment = 0;
 
 					// Keep this state sane.
-					glDevice.glBindRenderbuffer(GLenum.GL_RENDERBUFFER, 0);
+					glDevice.glBindRenderbuffer(
+						GLenum.GL_RENDERBUFFER,
+						glDevice.realBackbufferRBO
+					);
 
 					return;
 				}
@@ -4429,13 +4476,16 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 
 				// Keep this state sane.
-				glDevice.glBindRenderbuffer(GLenum.GL_RENDERBUFFER, 0);
+				glDevice.glBindRenderbuffer(
+					GLenum.GL_RENDERBUFFER,
+					glDevice.realBackbufferRBO
+				);
 			}
 
 			public void Dispose()
 			{
 				uint handle = Handle;
-				glDevice.BindFramebuffer(0);
+				glDevice.BindFramebuffer(glDevice.realBackbufferFBO);
 				glDevice.glDeleteFramebuffers(1, ref handle);
 				glDevice.glDeleteRenderbuffers(1, ref colorAttachment);
 				if (depthStencilAttachment != 0)
@@ -4610,7 +4660,10 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 
 				// Keep this state sane.
-				glDevice.glBindRenderbuffer(GLenum.GL_RENDERBUFFER, 0);
+				glDevice.glBindRenderbuffer(
+					GLenum.GL_RENDERBUFFER,
+					glDevice.realBackbufferRBO
+				);
 			}
 		}
 
@@ -4634,11 +4687,8 @@ namespace Microsoft.Xna.Framework.Graphics
 
 			public DepthFormat DepthFormat
 			{
-				get
-				{
-					// Constant, per SDL2_GameWindow
-					return DepthFormat.Depth24Stencil8;
-				}
+				get;
+				private set;
 			}
 
 			public int MultiSampleCount
@@ -4650,10 +4700,11 @@ namespace Microsoft.Xna.Framework.Graphics
 				}
 			}
 
-			public NullBackbuffer(int width, int height)
+			public NullBackbuffer(int width, int height, DepthFormat depthFormat)
 			{
 				Width = width;
 				Height = height;
+				DepthFormat = depthFormat;
 			}
 
 			public void ResetFramebuffer(

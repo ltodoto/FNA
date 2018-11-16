@@ -35,6 +35,10 @@ namespace Microsoft.Xna.Framework
 			"FNA_KEYBOARD_USE_SCANCODES"
 		) == "1";
 
+		private static bool SupportsGlobalMouse;
+
+		private static float HapticMaxWorkaround;
+
 		#endregion
 
 		#region Game Objects
@@ -46,7 +50,7 @@ namespace Microsoft.Xna.Framework
 
 		#region Init/Exit Methods
 
-		public static void ProgramInit()
+		public static string ProgramInit()
 		{
 			// This is how we can weed out cases where fnalibs is missing
 			try
@@ -68,6 +72,24 @@ namespace Microsoft.Xna.Framework
 			 * -flibit
 			 */
 			SDL.SDL_SetMainReady();
+
+			/* A number of platforms don't support global mouse, but
+			 * this really only matters on desktop where the game
+			 * screen may not be covering the whole display.
+			 */
+			if (	OSVersion.Equals("Windows") ||
+				OSVersion.Equals("Mac OS X") ||
+				OSVersion.Equals("Linux") ||
+				OSVersion.Equals("FreeBSD") ||
+				OSVersion.Equals("OpenBSD") ||
+				OSVersion.Equals("NetBSD")	)
+			{
+				SupportsGlobalMouse = true;
+			}
+			else
+			{
+				SupportsGlobalMouse = false;
+			}
 
 			// Also, Windows is an idiot. -flibit
 			if (	OSVersion.Equals("Windows") ||
@@ -92,9 +114,48 @@ namespace Microsoft.Xna.Framework
 				);
 			}
 
+			/* FIXME: SDL bug!
+			 * I have a bit of a confession to make: In 2013 I wrote
+			 * SDL_HAPTIC_LEFTRIGHT, and I developed it primarily on
+			 * Linux, where the force feedback API works with u16
+			 * values. The only other platform that legitimately
+			 * supports left/right rumble is Windows, where XInput
+			 * coincidentally also takes in u16 values.
+			 *
+			 * As it turns out, both in XInput and Linux, the
+			 * existing effect code had bugs where neither platform
+			 * adjusted the input value to what SDL _actually_
+			 * expects, which is s16 > 0, to mimic DirectInput.
+			 * So when writing LEFTRIGHT, it just happened to work
+			 * exactly right on the only supported platforms.
+			 *
+			 * But then someone fixed the bug in XInput, and on
+			 * platforms that have emerged since then, our max value
+			 * finally broke. Interestingly this may also be wrong
+			 * for LeftRightMacHack, but that was someone else's
+			 * custom driver and they wrote that path so :shrug:
+			 *
+			 * For now, we're going to keep using u16 on Linux, and
+			 * s16 > 0 everywhere else. Remove this when 2.0.9 is
+			 * out, and go back to u16 when 2.1 is out and bases its
+			 * magnitudes on XInput rather than DirectInput.
+			 * -flibit
+			 */
+			if (OSVersion.Equals("Linux"))
+			{
+				HapticMaxWorkaround = 65535.0f;
+			}
+			else
+			{
+				HapticMaxWorkaround = 32767.0f;
+			}
+
+			/* Mount TitleLocation.Path */
+			string titleLocation = GetBaseDirectory();
+
 			// If available, load the SDL_GameControllerDB
 			string mappingsDB = Path.Combine(
-				TitleLocation.Path,
+				titleLocation,
 				"gamecontrollerdb.txt"
 			);
 			if (File.Exists(mappingsDB))
@@ -150,10 +211,20 @@ namespace Microsoft.Xna.Framework
 					INTERNAL_AddInstance(i);
 				}
 			}
+
+			return titleLocation;
 		}
 
 		public static void ProgramExit(object sender, EventArgs e)
 		{
+			AudioEngine.ProgramExiting = true;
+
+			if (SoundEffect.FAudioContext.Context != null)
+			{
+				SoundEffect.FAudioContext.Context.Dispose();
+			}
+			Media.MediaPlayer.DisposeIfNecessary();
+
 			// This _should_ be the last SDL call we make...
 			SDL.SDL_Quit();
 		}
@@ -233,6 +304,38 @@ namespace Microsoft.Xna.Framework
 			}
 			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_DEPTH_SIZE, 24);
 			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_STENCIL_SIZE, 8);
+
+			int depthSize = 24;
+			int stencilSize = 8;
+			DepthFormat windowDepthFormat;
+			if (Enum.TryParse(
+				Environment.GetEnvironmentVariable("FNA_OPENGL_WINDOW_DEPTHSTENCILFORMAT"),
+				true,
+				out windowDepthFormat))
+			{
+				if (windowDepthFormat == DepthFormat.None)
+				{
+					depthSize = 0;
+					stencilSize = 0;
+				}
+				else if (windowDepthFormat == DepthFormat.Depth16)
+				{
+					depthSize = 16;
+					stencilSize = 0;
+				}
+				else if (windowDepthFormat == DepthFormat.Depth24)
+				{
+					depthSize = 24;
+					stencilSize = 0;
+				}
+				else if (windowDepthFormat == DepthFormat.Depth24Stencil8)
+				{
+					depthSize = 24;
+					stencilSize = 8;
+				}
+			}
+			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_DEPTH_SIZE, depthSize);
+			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_STENCIL_SIZE, stencilSize);
 			SDL.SDL_GL_SetAttribute(SDL.SDL_GLattr.SDL_GL_DOUBLEBUFFER, 1);
 			if (forceESVersion > 0)
 			{
@@ -309,7 +412,10 @@ namespace Microsoft.Xna.Framework
 			);
 			if (window == IntPtr.Zero)
 			{
-				// This especially helps debugging window creation failures with ES -ade
+				/* If this happens, the GL attributes were
+				 * rejected by the platform. This is EXTREMELY
+				 * rare (unless you're on Android, of course).
+				 */
 				throw new NoSuitableGraphicsDeviceException(
 					SDL.SDL_GetError()
 				);
@@ -358,6 +464,11 @@ namespace Microsoft.Xna.Framework
 			if (Mouse.WindowHandle == window.Handle)
 			{
 				Mouse.WindowHandle = IntPtr.Zero;
+			}
+
+			if (TouchPanel.WindowHandle == window.Handle)
+			{
+				TouchPanel.WindowHandle = IntPtr.Zero;
 			}
 
 			SDL.SDL_DestroyWindow(window.Handle);
@@ -551,7 +662,7 @@ namespace Microsoft.Xna.Framework
 			 */
 			try
 			{
-				fileIn = INTERNAL_GetIconName(title, ".png");
+				fileIn = INTERNAL_GetIconName(title + ".png");
 				if (!String.IsNullOrEmpty(fileIn))
 				{
 					IntPtr icon = SDL_image.IMG_Load(fileIn);
@@ -565,7 +676,7 @@ namespace Microsoft.Xna.Framework
 				// Not that big a deal guys.
 			}
 
-			fileIn = INTERNAL_GetIconName(title, ".bmp");
+			fileIn = INTERNAL_GetIconName(title + ".bmp");
 			if (!String.IsNullOrEmpty(fileIn))
 			{
 				IntPtr icon = SDL.SDL_LoadBMP(fileIn);
@@ -574,24 +685,27 @@ namespace Microsoft.Xna.Framework
 			}
 		}
 
-		private static string INTERNAL_GetIconName(string title, string extension)
+		private static string INTERNAL_GetIconName(string title)
 		{
-			string fileIn = String.Empty;
-			if (File.Exists(Path.Combine(TitleLocation.Path, title + extension)))
+			string fileIn = Path.Combine(TitleLocation.Path, title);
+			if (File.Exists(fileIn))
 			{
 				// If the title and filename work, it just works. Fine.
-				fileIn = title + extension;
+				return fileIn;
 			}
 			else
 			{
 				// But sometimes the title has invalid characters inside.
-				string fixPath = INTERNAL_StripBadChars(title) + extension;
-				if (File.Exists(Path.Combine(TitleLocation.Path, fixPath)))
+				fileIn = Path.Combine(
+					TitleLocation.Path,
+					INTERNAL_StripBadChars(title)
+				);
+				if (File.Exists(fileIn))
 				{
-					fileIn = fixPath;
+					return fileIn;
 				}
 			}
-			return fileIn;
+			return String.Empty;
 		}
 
 		private static string INTERNAL_StripBadChars(string path)
@@ -669,6 +783,9 @@ namespace Microsoft.Xna.Framework
 				osxUseSpaces = false;
 			}
 
+			// Perform initial check for a touch device
+			TouchPanel.TouchDeviceExists = GetTouchCapabilities().IsConnected;
+
 			// Do we want to read keycodes or scancodes?
 			if (UseScancodes)
 			{
@@ -718,9 +835,9 @@ namespace Microsoft.Xna.Framework
 						if (!keys.Contains(key))
 						{
 							keys.Add(key);
-							if (textInputBindings.ContainsKey(key))
+							int textIndex;
+							if (textInputBindings.TryGetValue(key, out textIndex))
 							{
-								int textIndex = textInputBindings[key];
 								textInputControlDown[textIndex] = true;
 								textInputControlRepeat[textIndex] = Environment.TickCount + 400;
 								TextInputEXT.OnTextInput(textInputCharacters[textIndex]);
@@ -739,9 +856,10 @@ namespace Microsoft.Xna.Framework
 						Keys key = ToXNAKey(ref evt.key.keysym);
 						if (keys.Remove(key))
 						{
-							if (textInputBindings.ContainsKey(key))
+							int value;
+							if (textInputBindings.TryGetValue(key, out value))
 							{
-								textInputControlDown[textInputBindings[key]] = false;
+								textInputControlDown[value] = false;
 							}
 							else if ((!keys.Contains(Keys.LeftControl) && textInputControlDown[3]) || key == Keys.V)
 							{
@@ -765,38 +883,38 @@ namespace Microsoft.Xna.Framework
 					// Touch Input
 					else if (evt.type == SDL.SDL_EventType.SDL_FINGERDOWN)
 					{
-						TouchPanel.AddEvent(
-							(int) evt.tfinger.fingerId,
+						// Windows only notices a touch screen once it's touched
+						TouchPanel.TouchDeviceExists = true;
+
+						TouchPanel.INTERNAL_onTouchEvent(
+							(int)evt.tfinger.fingerId,
 							TouchLocationState.Pressed,
-							new Vector2(
-								evt.tfinger.x,
-								evt.tfinger.y
-							),
-							evt.tfinger.pressure
-						);
-					}
-					else if (evt.type == SDL.SDL_EventType.SDL_FINGERUP)
-					{
-						TouchPanel.AddEvent(
-							(int) evt.tfinger.fingerId,
-							TouchLocationState.Released,
-							new Vector2(
-								evt.tfinger.x,
-								evt.tfinger.y
-							),
-							evt.tfinger.pressure
+							evt.tfinger.x,
+							evt.tfinger.y,
+							0,
+							0
 						);
 					}
 					else if (evt.type == SDL.SDL_EventType.SDL_FINGERMOTION)
 					{
-						TouchPanel.AddEvent(
-							(int) evt.tfinger.fingerId,
+						TouchPanel.INTERNAL_onTouchEvent(
+							(int)evt.tfinger.fingerId,
 							TouchLocationState.Moved,
-							new Vector2(
-								evt.tfinger.x,
-								evt.tfinger.y
-							),
-							evt.tfinger.pressure
+							evt.tfinger.x,
+							evt.tfinger.y,
+							evt.tfinger.dx,
+							evt.tfinger.dy
+						);
+					}
+					else if (evt.type == SDL.SDL_EventType.SDL_FINGERUP)
+					{
+						TouchPanel.INTERNAL_onTouchEvent(
+							(int)evt.tfinger.fingerId,
+							TouchLocationState.Released,
+							evt.tfinger.x,
+							evt.tfinger.y,
+							0,
+							0
 						);
 					}
 
@@ -836,13 +954,18 @@ namespace Microsoft.Xna.Framework
 						}
 
 						// Window Resize
-						else if (evt.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_RESIZED)
+						else if (evt.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_SIZE_CHANGED)
 						{
+							// This is called on both API and WM resizes
 							Mouse.INTERNAL_WindowWidth = evt.window.data1;
 							Mouse.INTERNAL_WindowHeight = evt.window.data2;
 							TouchPanel.INTERNAL_WindowWidth = evt.window.data1;
 							TouchPanel.INTERNAL_WindowHeight = evt.window.data2;
+						}
+						else if (evt.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_RESIZED)
+						{
 							/* This should be called on user resize only, NOT ApplyChanges!
+							 * Sadly some window managers are idiots and fire events anyway.
 							 * Also ignore any other "resizes" (alt-tab, fullscreen, etc.)
 							 * -flibit
 							 */
@@ -851,15 +974,9 @@ namespace Microsoft.Xna.Framework
 								((FNAWindow) game.Window).INTERNAL_ClientSizeChanged();
 							}
 						}
-						else if (evt.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_SIZE_CHANGED)
-						{
-							Mouse.INTERNAL_WindowWidth = evt.window.data1;
-							Mouse.INTERNAL_WindowHeight = evt.window.data2;
-							TouchPanel.INTERNAL_WindowWidth = evt.window.data1;
-							TouchPanel.INTERNAL_WindowHeight = evt.window.data2;
-						}
 						else if (evt.window.windowEvent == SDL.SDL_WindowEventID.SDL_WINDOWEVENT_EXPOSED)
 						{
+							// This is typically called when the window is made bigger
 							game.RedrawWindow();
 						}
 
@@ -907,24 +1024,36 @@ namespace Microsoft.Xna.Framework
 					// Text Input
 					else if (evt.type == SDL.SDL_EventType.SDL_TEXTINPUT && !textInputSuppress)
 					{
-						string text;
-
 						// Based on the SDL2# LPUtf8StrMarshaler
 						unsafe
 						{
 							byte* endPtr = evt.text.text;
-							while (*endPtr != 0)
+							if (*endPtr != 0)
 							{
-								endPtr++;
-							}
-							byte[] bytes = new byte[endPtr - evt.text.text];
-							Marshal.Copy((IntPtr) evt.text.text, bytes, 0, bytes.Length);
-							text = System.Text.Encoding.UTF8.GetString(bytes);
-						}
+								int bytes = 0;
+								while (*endPtr != 0)
+								{
+									endPtr++;
+									bytes += 1;
+								}
 
-						foreach (char c in text)
-						{
-							TextInputEXT.OnTextInput(c);
+								/* UTF8 will never encode more characters
+								 * than bytes in a string, so bytes is a
+								 * suitable upper estimate of size needed
+								 */
+								char* charsBuffer = stackalloc char[bytes];
+								int chars = Encoding.UTF8.GetChars(
+									evt.text.text,
+									bytes,
+									charsBuffer,
+									bytes
+								);
+
+								for (int i = 0; i < chars; i += 1)
+								{
+									TextInputEXT.OnTextInput(charsBuffer[i]);
+								}
+							}
 						}
 					}
 
@@ -972,26 +1101,6 @@ namespace Microsoft.Xna.Framework
 			return new OpenGLDevice(presentationParameters, adapter);
 		}
 
-		public static IALDevice CreateALDevice()
-		{
-			try
-			{
-				return new OpenALDevice();
-			}
-			catch(DllNotFoundException e)
-			{
-				FNALoggerEXT.LogError("OpenAL not found! Need FNA.dll.config?");
-				throw e;
-			}
-			catch(Exception)
-			{
-				/* We ignore device creation exceptions,
-				 * as they are handled down the line with Instance != null
-				 */
-				return null;
-			}
-		}
-
 		#endregion
 
 		#region Graphics Methods
@@ -1002,6 +1111,7 @@ namespace Microsoft.Xna.Framework
 			{
 				bool disableLateSwapTear = (
 					OSVersion.Equals("Mac OS X") ||
+					OSVersion.Equals("WinRT") ||
 					Environment.GetEnvironmentVariable("FNA_OPENGL_DISABLE_LATESWAPTEAR") == "1"
 				);
 				if (disableLateSwapTear)
@@ -1083,31 +1193,24 @@ namespace Microsoft.Xna.Framework
 					}
 				}
 
-				DisplayMode currentMode;
-
-				string currentModeOverride = Environment.GetEnvironmentVariable("FNA_GRAPHICS_MODE_CURRENT");
-				if (String.IsNullOrEmpty(currentModeOverride))
-				{
-					SDL.SDL_GetCurrentDisplayMode(i, out filler);
-					currentMode = new DisplayMode(
-						filler.w,
-						filler.h,
-						INTERNAL_convertPixelFormat(filler.format)
-					);
-				}
-				else
-				{
-					currentMode = INTERNAL_ParseModeString(currentModeOverride);
-				}
-
 				adapters[i] = new GraphicsAdapter(
-					currentMode,
 					new DisplayModeCollection(modes),
 					@"\\.\DISPLAY" + (i + 1).ToString(),
 					SDL.SDL_GetDisplayName(i)
 				);
 			}
 			return adapters;
+		}
+
+		public static DisplayMode GetCurrentDisplayMode(int adapterIndex)
+		{
+			SDL.SDL_DisplayMode filler = new SDL.SDL_DisplayMode();
+			SDL.SDL_GetCurrentDisplayMode(adapterIndex, out filler);
+			return new DisplayMode(
+				filler.w,
+				filler.h,
+				INTERNAL_convertPixelFormat(filler.format)
+			);
 		}
 
 		#endregion
@@ -1129,20 +1232,18 @@ namespace Microsoft.Xna.Framework
 			{
 				flags = SDL.SDL_GetRelativeMouseState(out x, out y);
 			}
-			else if ( // The following platforms don't support GetGlobalMouseState.
-				OSVersion.Equals("Emscripten") ||
-				OSVersion.Equals("Android") ||
-				OSVersion.Equals("iOS")
-			) {
-				flags = SDL.SDL_GetMouseState(out x, out y);
-			}
-			else
+			else if (SupportsGlobalMouse)
 			{
 				flags = SDL.SDL_GetGlobalMouseState(out x, out y);
 				int wx = 0, wy = 0;
 				SDL.SDL_GetWindowPosition(window, out wx, out wy);
 				x -= wx;
 				y -= wy;
+			}
+			else
+			{
+				/* This is inaccurate, but what can you do... */
+				flags = SDL.SDL_GetMouseState(out x, out y);
 			}
 			left =		(ButtonState) (flags & SDL.SDL_BUTTON_LMASK);
 			middle =	(ButtonState) ((flags & SDL.SDL_BUTTON_MMASK) >> 1);
@@ -1225,8 +1326,13 @@ namespace Microsoft.Xna.Framework
 
 		#region Storage Methods
 
-		public static string GetBaseDirectory()
+		private static string GetBaseDirectory()
 		{
+		    string altBaseDir = Environment.GetEnvironmentVariable("FNA_BASEDIR");
+			if (!String.IsNullOrEmpty(altBaseDir))
+			{
+				return altBaseDir;
+			}
 			if (	OSVersion.Equals("Windows") ||
 				OSVersion.Equals("Mac OS X") ||
 				OSVersion.Equals("Linux") ||
@@ -1250,6 +1356,33 @@ namespace Microsoft.Xna.Framework
 			{
 				result = AppDomain.CurrentDomain.BaseDirectory;
 			}
+			if (string.IsNullOrEmpty(result))
+			{
+				/* In the chance that there is no base directory,
+				 * return the working directory and hope for the best.
+				 *
+				 * If we've reached this, the game has either been
+				 * started from its directory, or a wrapper has set up
+				 * the working directory to the game dir for us.
+				 *
+				 * Note about Android:
+				 *
+				 * There is no way from the C# side of things to cleanly
+				 * obtain where the game is located without looking at an
+				 * instance of System.Diagnostics.StackTrace or without
+				 * some interop between the Java and C# side of things.
+				 * We're assuming that either the environment itself is
+				 * setting one of the possible base paths to point to the
+				 * game dir, or that the Java side has called into the C#
+				 * side to set Environment.CurrentDirectory.
+				 *
+				 * In the best case, nothing would be set and the game
+				 * wouldn't use the title location in the first place, as
+				 * the assets would be read directly from the .apk / .obb
+				 * -ade
+				 */
+				result = Environment.CurrentDirectory;
+			}
 			return result;
 		}
 
@@ -1260,11 +1393,19 @@ namespace Microsoft.Xna.Framework
 			{
 				return altConfigDir;
 			}
+
+			// Generate the path of the game's savefolder
+			string exeName = Path.GetFileNameWithoutExtension(
+				AppDomain.CurrentDomain.FriendlyName
+			).Replace(".vshost", "");
+
+			// Get the OS save folder, append the EXE name
 			if (OSVersion.Equals("Windows"))
 			{
 				return Path.Combine(
 					Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-					"SavedGames"
+					"SavedGames",
+					exeName
 				);
 			}
 			if (OSVersion.Equals("Mac OS X"))
@@ -1274,8 +1415,11 @@ namespace Microsoft.Xna.Framework
 				{
 					return "."; // Oh well.
 				}
-				osConfigDir += "/Library/Application Support";
-				return osConfigDir;
+				return Path.Combine(
+					osConfigDir,
+					"Library/Application Support",
+					exeName
+				);
 			}
 			if (OSVersion.Equals("Linux") ||
 				OSVersion.Equals("FreeBSD") ||
@@ -1293,7 +1437,7 @@ namespace Microsoft.Xna.Framework
 					}
 					osConfigDir += "/.local/share";
 				}
-				return osConfigDir;
+				return Path.Combine(osConfigDir, exeName);
 			}
 
 			if (OSVersion.Equals("Android"))
@@ -1314,38 +1458,103 @@ namespace Microsoft.Xna.Framework
 			if (OSVersion.Equals("WinRT") ||
 				OSVersion.Equals("iOS") ||
 				OSVersion.Equals("tvOS") ||
-				OSVersion.Equals("Android") ||
 				OSVersion.Equals("Emscripten"))
 			{
-				/* StorageContainer and SDL_GetPrefPath kind of
-				 * overlap each other. Container produces 'app'
-				 * but for SDL only 'org' is optional. So we
-				 * deal with this by sending _our_ org to SDL,
-				 * then StorageContainer appends the app name.
-				 * -flibit
-				 */
-				string app = "FNA"; /* Gotta be somethin' */
-				Assembly assembly = Assembly.GetEntryAssembly();
-				if (assembly != null)
-				{
-					AssemblyCompanyAttribute ca = (AssemblyCompanyAttribute) Attribute.GetCustomAttribute(
-						assembly,
-						typeof(AssemblyCompanyAttribute)
-					);
-					if (ca != null && !string.IsNullOrEmpty(ca.Company))
-					{
-						app = INTERNAL_StripBadChars(ca.Company);
-					}
-					else
-					{
-						throw new ArgumentNullException(
-							"Set AssemblyCompany in your AssemblyInfo!"
-						);
-					}
-				}
-				return SDL.SDL_GetPrefPath(null, app);
+				return null;
 			}
-			throw new NotSupportedException("Unhandled SDL2 platform!");
+
+			/* There is a minor inaccuracy here: SDL_GetPrefPath
+			 * creates the directories right away, whereas XNA will
+			 * only create the directory upon creating a container.
+			 * So if you create a StorageDevice and hit a property,
+			 * the game folder is made early!
+			 * -flibit
+			 */
+			return SDL.SDL_GetPrefPath(null, exeName);
+		}
+
+		public static DriveInfo GetDriveInfo(string storageRoot)
+		{
+			if (OSVersion.Equals("WinRT"))
+			{
+				// WinRT DriveInfo is a bunch of crap -flibit
+				return null;
+			}
+
+			DriveInfo result;
+			try
+			{
+				result = new DriveInfo(MonoPathRootWorkaround(storageRoot));
+			}
+			catch(Exception e)
+			{
+				FNALoggerEXT.LogError("Failed to get DriveInfo: " + e.ToString());
+				result = null;
+			}
+			return result;
+		}
+
+		private static string MonoPathRootWorkaround(string storageRoot)
+		{
+			if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+			{
+				// This is what we should be doing everywhere...
+				return Path.GetPathRoot(storageRoot);
+			}
+
+			// This is stolen from Mono's Path.cs
+			if (storageRoot == null)
+			{
+				return null;
+			}
+			if (storageRoot.Trim().Length == 0)
+			{
+				throw new ArgumentException("The specified path is not of a legal form.");
+			}
+			if (!Path.IsPathRooted(storageRoot))
+			{
+				return string.Empty;
+			}
+
+			/* FIXME: Mono bug!
+			 *
+			 * For Unix, the Mono Path.GetPathRoot is pretty lazy:
+			 * https://github.com/mono/mono/blob/master/mcs/class/corlib/System.IO/Path.cs#L443
+			 * It should actually be checking the drives and
+			 * comparing them to the provided path.
+			 * If a Mono maintainer is reading this, please steal
+			 * this code so we don't have to hack around Mono!
+			 *
+			 * -flibit
+			 */
+			int drive = -1, length = 0;
+			string[] drives = Environment.GetLogicalDrives();
+			for (int i = 0; i < drives.Length; i += 1)
+			{
+				if (string.IsNullOrEmpty(drives[i]))
+				{
+					// ... What?
+					continue;
+				}
+				string name = drives[i];
+				if (name[name.Length - 1] != Path.DirectorySeparatorChar)
+				{
+					name += Path.DirectorySeparatorChar;
+				}
+				if (	storageRoot.StartsWith(name) &&
+					name.Length > length	)
+				{
+					drive = i;
+					length = name.Length;
+				}
+			}
+			if (drive >= 0)
+			{
+				return drives[drive];
+			}
+
+			// Uhhhhh
+			return Path.GetPathRoot(storageRoot);
 		}
 
 		#endregion
@@ -1376,9 +1585,10 @@ namespace Microsoft.Xna.Framework
 			bool zoom = false
 		) {
 			// Load the SDL_Surface* from RWops, get the image data
-			FakeRWops reader = new FakeRWops(stream);
-			IntPtr surface = SDL_image.IMG_Load_RW(reader.rwops, 0);
-			reader.Free();
+			IntPtr surface = SDL_image.IMG_Load_RW(
+				FakeRWops.Alloc(stream),
+				1
+			);
 			if (surface == IntPtr.Zero)
 			{
 				// File not found, supported, etc.
@@ -1534,9 +1744,11 @@ namespace Microsoft.Xna.Framework
 				width,
 				height
 			);
-			FakeRWops writer = new FakeRWops(stream);
-			SDL_image.IMG_SavePNG_RW(surface, writer.rwops, 0);
-			writer.Free();
+			SDL_image.IMG_SavePNG_RW(
+				surface,
+				FakeRWops.Alloc(stream),
+				1
+			);
 			SDL.SDL_FreeSurface(surface);
 		}
 
@@ -1568,9 +1780,12 @@ namespace Microsoft.Xna.Framework
 			SDL.SDL_FreeSurface(surface);
 			surface = temp;
 
-			FakeRWops writer = new FakeRWops(stream);
-			SDL_image.IMG_SaveJPG_RW(surface, writer.rwops, 0, quality);
-			writer.Free();
+			SDL_image.IMG_SaveJPG_RW(
+				surface,
+				FakeRWops.Alloc(stream),
+				1,
+				quality
+			);
 			SDL.SDL_FreeSurface(surface);
 		}
 
@@ -1691,7 +1906,7 @@ namespace Microsoft.Xna.Framework
 			return null;
 		}
 
-		private class FakeRWops
+		private static class FakeRWops
 		{
 			[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 			private delegate long SizeFunc(IntPtr context);
@@ -1719,6 +1934,9 @@ namespace Microsoft.Xna.Framework
 				IntPtr num
 			);
 
+			[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+			private delegate int CloseFunc(IntPtr context);
+
 			[StructLayout(LayoutKind.Sequential)]
 			private struct PartialRWops
 			{
@@ -1726,51 +1944,57 @@ namespace Microsoft.Xna.Framework
 				public IntPtr seek;
 				public IntPtr read;
 				public IntPtr write;
+				public IntPtr close;
 			}
 
-			[DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+			[DllImport("SDL2", CallingConvention = CallingConvention.Cdecl)]
 			private static extern IntPtr SDL_AllocRW();
 
-			[DllImport("SDL2.dll", CallingConvention = CallingConvention.Cdecl)]
+			[DllImport("SDL2", CallingConvention = CallingConvention.Cdecl)]
 			private static extern void SDL_FreeRW(IntPtr area);
 
-			public readonly IntPtr rwops;
-			private Stream stream;
-			private byte[] temp;
+			private static readonly Dictionary<IntPtr, Stream> streamMap =
+				new Dictionary<IntPtr, Stream>();
 
-			private SizeFunc sizeFunc;
-			private SeekFunc seekFunc;
-			private ReadFunc readFunc;
-			private WriteFunc writeFunc;
+			// Based on PNG_ZBUF_SIZE default
+			private static byte[] temp = new byte[8192];
 
-			public FakeRWops(Stream stream)
+			private static readonly SizeFunc sizeFunc = size;
+			private static readonly SeekFunc seekFunc = seek;
+			private static readonly ReadFunc readFunc = read;
+			private static readonly WriteFunc writeFunc = write;
+			private static readonly CloseFunc closeFunc = close;
+			private static readonly IntPtr sizePtr =
+				Marshal.GetFunctionPointerForDelegate(sizeFunc);
+			private static readonly IntPtr seekPtr =
+				Marshal.GetFunctionPointerForDelegate(seekFunc);
+			private static readonly IntPtr readPtr =
+				Marshal.GetFunctionPointerForDelegate(readFunc);
+			private static readonly IntPtr writePtr =
+				Marshal.GetFunctionPointerForDelegate(writeFunc);
+			private static readonly IntPtr closePtr =
+				Marshal.GetFunctionPointerForDelegate(closeFunc);
+
+			public static IntPtr Alloc(Stream stream)
 			{
-				this.stream = stream;
-				rwops = SDL_AllocRW();
-				temp = new byte[8192]; // Based on PNG_ZBUF_SIZE default
-
-				sizeFunc = size;
-				seekFunc = seek;
-				readFunc = read;
-				writeFunc = write;
+				IntPtr rwops = SDL_AllocRW();
 				unsafe
 				{
 					PartialRWops* p = (PartialRWops*) rwops;
-					p->size = Marshal.GetFunctionPointerForDelegate(sizeFunc);
-					p->seek = Marshal.GetFunctionPointerForDelegate(seekFunc);
-					p->read = Marshal.GetFunctionPointerForDelegate(readFunc);
-					p->write = Marshal.GetFunctionPointerForDelegate(writeFunc);
+					p->size = sizePtr;
+					p->seek = seekPtr;
+					p->read = readPtr;
+					p->write = writePtr;
+					p->close = closePtr;
 				}
+				lock (streamMap)
+				{
+					streamMap.Add(rwops, stream);
+				}
+				return rwops;
 			}
 
-			public void Free()
-			{
-				SDL_FreeRW(rwops);
-				stream = null;
-				temp = null;
-			}
-
-			private byte[] GetTemp(int len)
+			private static byte[] GetTemp(int len)
 			{
 				if (len > temp.Length)
 				{
@@ -1779,49 +2003,179 @@ namespace Microsoft.Xna.Framework
 				return temp;
 			}
 
-			private long size(IntPtr context)
+			[ObjCRuntime.MonoPInvokeCallback(typeof(SizeFunc))]
+			private static long size(IntPtr context)
 			{
 				return -1;
 			}
 
-			private long seek(IntPtr context, long offset, int whence)
+			[ObjCRuntime.MonoPInvokeCallback(typeof(SeekFunc))]
+			private static long seek(IntPtr context, long offset, int whence)
 			{
+				Stream stream;
+				lock (streamMap)
+				{
+					stream = streamMap[context];
+				}
 				stream.Seek(offset, (SeekOrigin) whence);
 				return stream.Position;
 			}
 
-			private IntPtr read(
+			[ObjCRuntime.MonoPInvokeCallback(typeof(ReadFunc))]
+			private static IntPtr read(
 				IntPtr context,
 				IntPtr ptr,
 				IntPtr size,
 				IntPtr maxnum
 			) {
+				Stream stream;
 				int len = size.ToInt32() * maxnum.ToInt32();
-				len = stream.Read(
-					GetTemp(len),
-					0,
-					len
-				);
-				Marshal.Copy(temp, 0, ptr, len);
+				lock (streamMap)
+				{
+					stream = streamMap[context];
+
+					// Other streams may contend for temp!
+					len = stream.Read(
+						GetTemp(len),
+						0,
+						len
+					);
+					Marshal.Copy(temp, 0, ptr, len);
+				}
 				return (IntPtr) len;
 			}
 
-			private IntPtr write(
+			[ObjCRuntime.MonoPInvokeCallback(typeof(WriteFunc))]
+			private static IntPtr write(
 				IntPtr context,
 				IntPtr ptr,
 				IntPtr size,
 				IntPtr num
 			) {
+				Stream stream;
 				int len = size.ToInt32() * num.ToInt32();
-				Marshal.Copy(
-					ptr,
-					GetTemp(len),
-					0,
-					len
-				);
-				stream.Write(temp, 0, len);
+				lock (streamMap)
+				{
+					stream = streamMap[context];
+
+					// Other streams may contend for temp!
+					Marshal.Copy(
+						ptr,
+						GetTemp(len),
+						0,
+						len
+					);
+					stream.Write(temp, 0, len);
+				}
 				return (IntPtr) len;
 			}
+
+			[ObjCRuntime.MonoPInvokeCallback(typeof(CloseFunc))]
+			public static int close(IntPtr context)
+			{
+				lock (streamMap)
+				{
+					streamMap.Remove(context);
+				}
+				SDL_FreeRW(context);
+				return 0;
+			}
+		}
+
+		#endregion
+
+		#region Microphone Implementation
+
+		/* Microphone is almost never used, so we give this subsystem
+		 * special treatment and init only when we start calling these
+		 * functions.
+		 * -flibit
+		 */
+		private static bool micInit = false;
+
+		public static Microphone[] GetMicrophones()
+		{
+			// Init subsystem if needed
+			if (!micInit)
+			{
+				SDL.SDL_InitSubSystem(SDL.SDL_INIT_AUDIO);
+				micInit = true;
+			}
+
+			// How many devices do we have...?
+			int numDev = SDL.SDL_GetNumAudioDevices(1);
+			if (numDev < 1)
+			{
+				// Blech
+				return new Microphone[0];
+			}
+			Microphone[] result = new Microphone[numDev + 1];
+
+			// Default input format
+			SDL.SDL_AudioSpec have;
+			SDL.SDL_AudioSpec want = new SDL.SDL_AudioSpec();
+			want.freq = Microphone.SAMPLERATE;
+			want.format = SDL.AUDIO_S16;
+			want.channels = 1;
+			want.samples = 4096; /* FIXME: Anything specific? */
+
+			// First mic is always OS default
+			result[0] = new Microphone(
+				SDL.SDL_OpenAudioDevice(
+					null,
+					1,
+					ref want,
+					out have,
+					0
+				),
+				"Default Device"
+			);
+			for (int i = 0; i < numDev; i += 1)
+			{
+				string name = SDL.SDL_GetAudioDeviceName(i, 1);
+				result[i + 1] = new Microphone(
+					SDL.SDL_OpenAudioDevice(
+						name,
+						1,
+						ref want,
+						out have,
+						0
+					),
+					name
+				);
+			}
+			return result;
+		}
+
+		public static unsafe int GetMicrophoneSamples(
+			uint handle,
+			byte[] buffer,
+			int offset,
+			int count
+		) {
+			fixed (byte* ptr = &buffer[offset])
+			{
+				return (int) SDL.SDL_DequeueAudio(
+					handle,
+					(IntPtr) ptr,
+					(uint) count
+				);
+			}
+		}
+
+		public static int GetMicrophoneQueuedBytes(uint handle)
+		{
+			return (int) SDL.SDL_GetQueuedAudioSize(handle);
+		}
+
+		public static void StartMicrophone(uint handle)
+		{
+			SDL.SDL_PauseAudioDevice(handle, 0);
+		}
+
+		public static void StopMicrophone(uint handle)
+		{
+			SDL.SDL_PauseAudioDevice(handle, 1);
 		}
 		#endregion
 
@@ -2066,8 +2420,8 @@ namespace Microsoft.Xna.Framework
 			}
 			else if (type == HapticType.LeftRight)
 			{
-				INTERNAL_leftRightEffect.leftright.large_magnitude = (ushort) (65535.0f * leftMotor);
-				INTERNAL_leftRightEffect.leftright.small_magnitude = (ushort) (65535.0f * rightMotor);
+				INTERNAL_leftRightEffect.leftright.large_magnitude = (ushort) (HapticMaxWorkaround * leftMotor);
+				INTERNAL_leftRightEffect.leftright.small_magnitude = (ushort) (HapticMaxWorkaround * rightMotor);
 				SDL.SDL_HapticUpdateEffect(
 					haptic,
 					0,
@@ -2081,8 +2435,8 @@ namespace Microsoft.Xna.Framework
 			}
 			else if (type == HapticType.LeftRightMacHack)
 			{
-				leftRightMacHackData[0] = (ushort) (65535.0f * leftMotor);
-				leftRightMacHackData[1] = (ushort) (65535.0f * rightMotor);
+				leftRightMacHackData[0] = (ushort) (HapticMaxWorkaround * leftMotor);
+				leftRightMacHackData[1] = (ushort) (HapticMaxWorkaround * rightMotor);
 				SDL.SDL_HapticUpdateEffect(
 					haptic,
 					0,
@@ -2435,6 +2789,34 @@ namespace Microsoft.Xna.Framework
 
 		#endregion
 
+		#region Touch Methods
+
+		public static TouchPanelCapabilities GetTouchCapabilities()
+		{
+			bool touchDeviceExists = SDL.SDL_GetNumTouchDevices() > 0;
+			return new TouchPanelCapabilities
+			{
+				/* Take these reported capabilities with a grain of salt.
+				 * On Windows, touch devices won't be detected until they
+				 * are interacted with. Also, MaximumTouchCount is completely
+				 * bogus. For any touch device, XNA always reports 4.
+				 * 
+				 * -caleb
+				 */
+				IsConnected = touchDeviceExists,
+				MaximumTouchCount = touchDeviceExists ? 4 : 0
+			};
+		}
+
+		public static int GetNumTouchFingers()
+		{
+			return SDL.SDL_GetNumTouchFingers(
+				SDL.SDL_GetTouchDevice(0)
+			);
+		}
+
+		#endregion
+
 		#region SDL2<->XNA Key Conversion Methods
 
 		/* From: http://blogs.msdn.com/b/shawnhar/archive/2007/07/02/twin-paths-to-garbage-collector-nirvana.aspx
@@ -2697,7 +3079,10 @@ namespace Microsoft.Xna.Framework
 			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_GRAVE,		Keys.OemTilde },
 			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_VOLUMEUP,		Keys.VolumeUp },
 			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_VOLUMEDOWN,	Keys.VolumeDown },
-			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_UNKNOWN,		Keys.None }
+			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_UNKNOWN,		Keys.None },
+			/* FIXME: The following scancodes need verification! */
+			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_NONUSHASH,	Keys.None },
+			{ (int) SDL.SDL_Scancode.SDL_SCANCODE_NONUSBACKSLASH,	Keys.None }
 		};
 		private static Dictionary<int, SDL.SDL_Scancode> INTERNAL_xnaMap = new Dictionary<int, SDL.SDL_Scancode>()
 		{

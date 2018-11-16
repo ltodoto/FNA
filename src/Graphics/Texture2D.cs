@@ -73,11 +73,19 @@ namespace Microsoft.Xna.Framework.Graphics
 			Height = height;
 			LevelCount = mipMap ? CalculateMipLevels(width, height) : 1;
 
-			// Hey, guess what? You can't render to a compressed texture!
+			// TODO: Use QueryRenderTargetFormat!
 			if (	this is IRenderTarget &&
-				(	format == SurfaceFormat.Dxt1 ||
-					format == SurfaceFormat.Dxt3 ||
-					format == SurfaceFormat.Dxt5	)	)
+				format != SurfaceFormat.Color &&
+				format != SurfaceFormat.Rgba1010102 &&
+				format != SurfaceFormat.Rg32 &&
+				format != SurfaceFormat.Rgba64 &&
+				format != SurfaceFormat.Single &&
+				format != SurfaceFormat.Vector2 &&
+				format != SurfaceFormat.Vector4 &&
+				format != SurfaceFormat.HalfSingle &&
+				format != SurfaceFormat.HalfVector2 &&
+				format != SurfaceFormat.HalfVector4 &&
+				format != SurfaceFormat.HdrBlendable	)
 			{
 				Format = SurfaceFormat.Color;
 			}
@@ -150,7 +158,7 @@ namespace Microsoft.Xna.Framework.Graphics
 				w = Math.Max(Width >> level, 1);
 				h = Math.Max(Height >> level, 1);
 			}
-
+			int elementSize = Marshal.SizeOf(typeof(T));
 			GCHandle handle = GCHandle.Alloc(data, GCHandleType.Pinned);
 			GraphicsDevice.GLDevice.SetTextureData2D(
 				texture,
@@ -160,12 +168,50 @@ namespace Microsoft.Xna.Framework.Graphics
 				w,
 				h,
 				level,
-				handle.AddrOfPinnedObject(),
-				startIndex,
-				elementCount,
-				Marshal.SizeOf(typeof(T))
+				handle.AddrOfPinnedObject() + startIndex * elementSize,
+				elementCount * elementSize
 			);
 			handle.Free();
+		}
+
+		public void SetDataPointerEXT(
+			int level,
+			Rectangle? rect,
+			IntPtr data,
+			int dataLength
+		) {
+			if (data == IntPtr.Zero)
+			{
+				throw new ArgumentNullException("data");
+			}
+
+			int x, y, w, h;
+			if (rect.HasValue)
+			{
+				x = rect.Value.X;
+				y = rect.Value.Y;
+				w = rect.Value.Width;
+				h = rect.Value.Height;
+			}
+			else
+			{
+				x = 0;
+				y = 0;
+				w = Math.Max(Width >> level, 1);
+				h = Math.Max(Height >> level, 1);
+			}
+
+			GraphicsDevice.GLDevice.SetTextureData2D(
+				texture,
+				Format,
+				x,
+				y,
+				w,
+				h,
+				level,
+				data,
+				dataLength
+			);
 		}
 
 		#endregion
@@ -291,6 +337,11 @@ namespace Microsoft.Xna.Framework.Graphics
 
 		public static Texture2D FromStream(GraphicsDevice graphicsDevice, Stream stream)
 		{
+			if (stream.CanSeek && stream.Position == stream.Length)
+			{
+				stream.Seek(0, SeekOrigin.Begin);
+			}
+
 			// Read the image data from the stream
 			int width, height;
 			byte[] pixels;
@@ -544,14 +595,17 @@ namespace Microsoft.Xna.Framework.Graphics
 				levels > 1,
 				format
 			);
-			if (stream is MemoryStream)
+			
+			byte[] tex = null;
+			if (	stream is MemoryStream &&
+				((MemoryStream) stream).TryGetBuffer(out tex)	)
 			{
 				for (int i = 0; i < levels; i += 1)
 				{
 					result.SetData(
 						i,
 						null,
-						((MemoryStream) stream).GetBuffer(),
+						tex,
 						(int) stream.Seek(0, SeekOrigin.Current),
 						levelSize
 					);
@@ -569,7 +623,7 @@ namespace Microsoft.Xna.Framework.Graphics
 			{
 				for (int i = 0; i < levels; i += 1)
 				{
-					byte[] tex = reader.ReadBytes(levelSize);
+					tex = reader.ReadBytes(levelSize);
 					result.SetData(
 						i,
 						null,
